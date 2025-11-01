@@ -5,174 +5,206 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.scenes.scene2d.Stage;
-import com.badlogic.gdx.scenes.scene2d.actions.Actions;
-import com.badlogic.gdx.scenes.scene2d.ui.Image;
-import com.badlogic.gdx.scenes.scene2d.ui.Label;
-import com.badlogic.gdx.scenes.scene2d.ui.Skin;
-import com.badlogic.gdx.scenes.scene2d.ui.Table;
-import com.badlogic.gdx.utils.Scaling;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.code_quest.Main;
-import io.github.code_quest.entities.actors.CodeRainActor;
 
 public class IntroScreen implements Screen {
     private final Main game;
-    private final boolean female;
-    private final Stage stage;
-    private final Skin skin;
+    private final OrthographicCamera camera;
+    private final FitViewport viewport;
     private final SpriteBatch batch;
+    private final BitmapFont font;
+    private final Texture overlayPixel;
+    private boolean transitionScheduled;
+    private float elapsed;
+    private float fadeAlpha = 1.0f;
+    private boolean isFadingIn = true;
+    private Animation<TextureRegion> animation;
+    private float stateTime = 0f;
+    private boolean showGif = false;
+    private TextureRegion currentFrame;
 
-    private Texture bgCorrupted;   // optional art: ui/backgrounds/corrupted_biome.png
-    private Texture enemyBug;      // optional art: ui/enemies/bug.png
-    private Texture avatarMale;    // optional art: ui/avatars/male.png
-    private Texture avatarFemale;  // optional art: ui/avatars/female.png
-
-    public IntroScreen(Main game, boolean femaleSelected) {
+    public IntroScreen(Main game) {
         this.game = game;
-        this.female = femaleSelected;
-        this.batch = new SpriteBatch();
-        this.stage = new Stage(new FitViewport(800, 480), batch);
-        this.skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
+        camera = new OrthographicCamera();
+        viewport = new FitViewport(800f, 480f, camera);
+        batch = new SpriteBatch();
+        font = new BitmapFont();
+        font.getData().setScale(1.25f);
+        font.setColor(Color.WHITE);
+        overlayPixel = createOverlayPixel();
         
-        // FIX: ensure default-font exists
-        if (!skin.has("default-font", BitmapFont.class)) {
-            skin.add("default-font", new BitmapFont());
+        // Load animation frames
+        try {
+            // Create a simple animation with a few frames
+            // Replace these with your actual animation frames
+            TextureRegion[] frames = new TextureRegion[4]; // Example: 4 frames
+            for (int i = 0; i < frames.length; i++) {
+                // Replace with your frame loading logic
+                // For example: frames[i] = new TextureRegion(new Texture(Gdx.files.internal("animation/frame" + i + ".png")));
+                // For now, we'll create colored rectangles as placeholders
+                frames[i] = createColorFrame(1f, 1f, 1f, 1f);
+            }
+            
+            // Create animation with 0.1 second frame duration and loop it
+            animation = new Animation<>(0.1f, frames);
+            animation.setPlayMode(Animation.PlayMode.LOOP);
+            showGif = true;
+            stateTime = 0f;
+            
+        } catch (Exception e) {
+            Gdx.app.error("IntroScreen", "Error creating animation: " + e.getMessage());
+            e.printStackTrace();
+            scheduleNextScreen();
         }
-        
-        loadOptionalAssets();
-        buildUI();
-        Gdx.input.setInputProcessor(stage);
     }
 
-    private void loadOptionalAssets() {
-        bgCorrupted = loadIfExists("ui/backgrounds/corrupted_biome.png");
-        enemyBug = loadIfExists("ui/enemies/bug.png");
-        avatarMale = loadIfExists("ui/avatars/male.png");
-        avatarFemale = loadIfExists("ui/avatars/female.png");
+
+    private Texture createOverlayPixel() {
+        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        pixmap.setColor(Color.WHITE);
+        pixmap.fill();
+        Texture texture = new Texture(pixmap);
+        pixmap.dispose();
+        return texture;
     }
 
-    private Texture loadIfExists(String path) {
-        if (Gdx.files.internal(path).exists()) return new Texture(Gdx.files.internal(path));
-        return null;
+    @Override
+    public void show() {
+        viewport.update(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), true);
+        camera.position.set(viewport.getWorldWidth() * 0.5f, viewport.getWorldHeight() * 0.5f, 0f);
+        camera.update();
     }
 
-    private Image solidPlaceholder(Color color, int w, int h) {
-        Pixmap pm = new Pixmap(w, h, Pixmap.Format.RGBA8888);
-        pm.setColor(color);
-        pm.fill();
-        Texture t = new Texture(pm);
-        pm.dispose();
-        Image img = new Image(t);
-        img.setScaling(Scaling.stretch);
-        return img;
-    }
-
-    private void buildUI() {
-        // Dark corrupted biome with red static glitches mood
-        Image bg;
-        if (bgCorrupted != null) {
-            bg = new Image(bgCorrupted);
-            bg.setScaling(Scaling.stretch);
-        } else {
-            bg = solidPlaceholder(new Color(0.05f, 0.0f, 0.02f, 1f), 8, 8);
-        }
-        bg.setFillParent(true);
-        stage.addActor(bg);
-
-        // Red-tinted code rain, slower, for ominous feel
-        CodeRainActor redRain = new CodeRainActor(800, 480, skin.getFont("default-font"), new Color(1f, 0.4f, 0.4f, 0.20f));
-        stage.addActor(redRain);
-
-        Table root = new Table();
-        root.setFillParent(true);
-        stage.addActor(root);
-
-        // Left: Player avatar
-        Image avatar = (female ? avatarFemale : avatarMale) != null
-                ? new Image(female ? avatarFemale : avatarMale)
-                : solidPlaceholder(new Color(0.18f, 0.18f, 0.18f, 1f), 96, 128);
-
-        // Right: Enemy bug
-        Image bug = enemyBug != null
-                ? new Image(enemyBug)
-                : solidPlaceholder(new Color(0.6f, 0.1f, 0.1f, 1f), 96, 96);
-
-        // Middle-top: holographic message
-        Label.LabelStyle holoStyle = new Label.LabelStyle(skin.getFont("default-font"), Color.valueOf("D2F1FF"));
-        Label holo = new Label("Welcome to the Digital Realm. The system is infected.\nOnly your Java skills can save it.", holoStyle);
-        holo.setAlignment(com.badlogic.gdx.utils.Align.center);
-        holo.setColor(0.8f, 1f, 1f, 0.88f);
-        holo.addAction(Actions.forever(Actions.sequence(
-            Actions.alpha(0.7f, 0.6f), Actions.alpha(0.9f, 0.6f)
-        )));
-
-        // Ground strip to suggest half-natural, half-digital terrain
-        Image groundNatural = solidPlaceholder(new Color(0.1f, 0.2f, 0.1f, 1f), 8, 8);
-        groundNatural.setColor(0.12f, 0.22f, 0.12f, 1f);
-        Image groundDigital = solidPlaceholder(new Color(0.5f, 0.0f, 0.0f, 1f), 8, 8);
-        groundDigital.setColor(0.8f, 0.1f, 0.1f, 1f);
-
-        Table top = new Table();
-        top.add(holo).padTop(30).padBottom(10).growX().center();
-
-        Table middle = new Table();
-        middle.add(avatar).size(140, 160).expand().right().padRight(30);
-        middle.add(bug).size(120, 120).expand().left().padLeft(30);
-
-        Table bottom = new Table();
-        bottom.add(groundNatural).height(30).growX().expandX().width(400);
-        bottom.add(groundDigital).height(30).growX().expandX().width(400);
-
-        root.top().pad(10);
-        root.add(top).growX().row();
-        root.add(middle).expand().row();
-        root.add(bottom).growX();
-
-        // Continue on any key / click
-        Label cont = new Label("Press Enter to continue...", skin);
-        cont.setColor(Color.valueOf("F2C0C0"));
-        cont.addAction(Actions.forever(Actions.sequence(
-            Actions.fadeOut(0.6f), Actions.fadeIn(0.6f)
-        )));
-        root.row();
-        root.add(cont).pad(10);
-
-        stage.getRoot().getColor().a = 0f;
-        stage.addAction(Actions.fadeIn(0.6f));
-    }
-
-    @Override public void show() {}
     @Override
     public void render(float delta) {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.justTouched()) {
-            // TODO: switch to the first gameplay/level screen later
-            stage.addAction(Actions.sequence(
-                Actions.fadeOut(0.4f),
-                Actions.run(() -> game.setScreen(new MenuScreen(game)))
-            ));
+        elapsed += delta;
+
+        // Handle fade in/out
+        if (isFadingIn) {
+            fadeAlpha = Math.max(0, fadeAlpha - delta);
+            if (fadeAlpha <= 0) {
+                isFadingIn = false;
+            }
+        }
+
+        // Handle skip button press
+        if (showGif && !transitionScheduled && (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.justTouched())) {
+            showGif = false;
+            scheduleNextScreen();
+        }
+
+        // Update animation state time
+        if (showGif) {
+            stateTime += delta;
+            // Show the animation for 5 seconds
+            if (stateTime >= 5.0f) {
+                showGif = false;
+                scheduleNextScreen();
+            }
         }
 
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-        stage.act(delta);
-        stage.draw();
+
+        viewport.apply();
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+
+        if (!showGif) {
+            float base = 0.2f + 0.1f * MathUtils.sin(elapsed * 1.2f);
+            batch.setColor(0.08f + base, 0.08f, 0.16f + base, 1f);
+            batch.draw(overlayPixel, 0f, 0f, viewport.getWorldWidth(), viewport.getWorldHeight());
+            batch.setColor(1f, 1f, 1f, 1f);
+        }
+
+        // Draw the animation if it should be shown
+        if (showGif && animation != null) {
+            // Get current frame of animation
+            currentFrame = animation.getKeyFrame(stateTime, true);
+            
+            if (currentFrame != null) {
+                float width = viewport.getWorldWidth();
+                float height = viewport.getWorldHeight();
+                float aspectRatio = (float)currentFrame.getRegionWidth() / currentFrame.getRegionHeight();
+                float drawWidth = width;
+                float drawHeight = width / aspectRatio;
+                
+                if (drawHeight > height) {
+                    drawHeight = height;
+                    drawWidth = height * aspectRatio;
+                }
+                
+                float x = (width - drawWidth) / 2f;
+                float y = (height - drawHeight) / 2f;
+                
+                batch.draw(currentFrame, x, y, drawWidth, drawHeight);
+            }
+        }
+
+        float pulse = 0.25f + 0.15f * MathUtils.sin(elapsed * 6f);
+        batch.setColor(1f, 0.2f, 0.4f, pulse);
+        batch.draw(overlayPixel, 0f, 0f, viewport.getWorldWidth(), viewport.getWorldHeight());
+        batch.setColor(0.2f, 0.6f, 1f, pulse * 0.6f);
+        batch.draw(overlayPixel, 0f, 0f, viewport.getWorldWidth(), viewport.getWorldHeight());
+        batch.setColor(Color.WHITE);
+
+        float textAlpha = 0.45f + 0.4f * MathUtils.sin(elapsed * 4f);
+        font.setColor(1f, 1f, 1f, MathUtils.clamp(textAlpha, 0f, 1f));
+        font.draw(batch, "Press Enter or Tap to skip", viewport.getWorldWidth() * 0.25f, 50f);
+
+        batch.end();
     }
-    @Override public void resize(int width, int height) { stage.getViewport().update(width, height, true); }
+
+    private void scheduleNextScreen() {
+        if (transitionScheduled) {
+            return;
+        }
+        transitionScheduled = true;
+        game.setScreen(new GameScreen(game));
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        viewport.update(width, height, true);
+        camera.position.set(viewport.getWorldWidth() * 0.5f, viewport.getWorldHeight() * 0.5f, 0f);
+        camera.update();
+    }
+
     @Override public void pause() {}
     @Override public void resume() {}
+    private TextureRegion createColorFrame(float r, float g, float b, float a) {
+        Pixmap pixmap = new Pixmap(100, 100, Pixmap.Format.RGBA8888);
+        pixmap.setColor(r, g, b, a);
+        pixmap.fill();
+        Texture texture = new Texture(pixmap);
+        pixmap.dispose();
+        return new TextureRegion(texture);
+    }
+    
     @Override public void hide() {}
-    @Override public void dispose() {
-        stage.dispose();
-        skin.dispose();
+
+    @Override
+    public void dispose() {
+        // Clean up resources
+        if (animation != null) {
+            for (TextureRegion frame : animation.getKeyFrames()) {
+                if (frame != null && frame.getTexture() != null) {
+                    frame.getTexture().dispose();
+                }
+            }
+        }
         batch.dispose();
-        if (bgCorrupted != null) bgCorrupted.dispose();
-        if (enemyBug != null) enemyBug.dispose();
-        if (avatarMale != null) avatarMale.dispose();
-        if (avatarFemale != null) avatarFemale.dispose();
+        font.dispose();
+        overlayPixel.dispose();
     }
 }

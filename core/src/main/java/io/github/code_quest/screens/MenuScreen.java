@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
@@ -20,12 +21,13 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.code_quest.Main;
-import io.github.code_quest.entities.actors.CodeRainActor;
-import io.github.code_quest.entities.GlitchParticles;
+import io.github.code_quest.entities.ModernGlitchParticles;
+// Removed particle imports for cleaner design
 
 public class MenuScreen implements Screen {
     private final Main game;
@@ -33,21 +35,20 @@ public class MenuScreen implements Screen {
     private final Skin skin;
     private final SpriteBatch batch;
 
-    private Texture bgGreenValley;     // optional art: ui/backgrounds/green_valley.png
-    private Texture logoTexture;       // optional art: ui/logo-codequest.png
-    private Texture avatarMale;        // optional art: ui/avatars/male.png
-    private Texture avatarFemale;      // optional art: ui/avatars/female.png
-    private Image avatarImage;
-
-    private boolean femaleSelected = false;
+    private Texture menuBackground;    // assets/images/menu-background.png
+    private Texture titleNormal;       // assets/images/menu-title.png
+    private Texture titleGlitch;      // assets/images/menu-title-glitch.png
+    private Texture startButton;      // assets/images/start-button.png
 
     private Image backgroundImage;
-    private CodeRainActor codeRain;
-    private GlitchParticles glitchParticles;
+    private Image titleImage;
+    private Image startButtonImage;
 
     private Table root;
-    private TextButton startBtn, loadBtn, settingsBtn, exitBtn;
-    private Label subtitleLabel;
+    private TextButton startBtn;
+    private ModernGlitchParticles glitchParticles;
+    private Music backgroundMusic;
+
 
     public MenuScreen(Main game) {
         this.game = game;
@@ -61,16 +62,26 @@ public class MenuScreen implements Screen {
         }
 
         loadOptionalAssets();
+        loadMusic();
         buildUI();
         wireInput();
     }
 
     private void loadOptionalAssets() {
-        // Try loading optional textures. If missing, we fallback to solid-color placeholders.
-        bgGreenValley = loadIfExists("ui/backgrounds/green_valley.png");
-        logoTexture = loadIfExists("ui/logo-codequest.png");
-        avatarMale = loadIfExists("ui/avatars/male.png");
-        avatarFemale = loadIfExists("ui/avatars/female.png");
+        // Load the specific assets for the new design
+        menuBackground = loadIfExists("images/menu-background.png");
+        titleNormal = loadIfExists("images/menu-title.png");
+        titleGlitch = loadIfExists("images/menu-title-glitch.png");
+        startButton = loadIfExists("images/start-button.png");
+    }
+
+    private void loadMusic() {
+        // Load and configure background music
+        if (Gdx.files.internal("sounds/loadingscreenmusic.wav").exists()) {
+            backgroundMusic = Gdx.audio.newMusic(Gdx.files.internal("sounds/loadingscreenmusic.wav"));
+            backgroundMusic.setLooping(true);
+            backgroundMusic.setVolume(0.5f); // Set volume to 50%
+        }
     }
 
     private Texture loadIfExists(String path) {
@@ -90,158 +101,146 @@ public class MenuScreen implements Screen {
     }
 
     private void buildUI() {
-        // Background: warm glowing digital valley with subtle green/teal tint if art missing
-        if (bgGreenValley != null) {
-            backgroundImage = new Image(bgGreenValley);
+        // Background: use the menu-background.png
+        if (menuBackground != null) {
+            backgroundImage = new Image(menuBackground);
             backgroundImage.setScaling(Scaling.stretch);
         } else {
-            backgroundImage = solidPlaceholder(new Color(0.07f, 0.12f, 0.06f, 1f), 8, 8);
+            backgroundImage = solidPlaceholder(new Color(0.05f, 0.1f, 0.05f, 1f), 8, 8);
         }
         backgroundImage.setFillParent(true);
         stage.addActor(backgroundImage);
 
-        // Subtle code rain behind UI
-        codeRain = new CodeRainActor(800, 480, skin.getFont("default-font"), new Color(0.8f, 1f, 0.8f, 0.18f));
-        stage.addActor(codeRain);
-
-        // Faint glitch particles
-        glitchParticles = new GlitchParticles(800, 480, 30, new Color(0.8f, 1f, 0.8f, 0.25f));
+       // Modern glitch particles for background
+        glitchParticles = new ModernGlitchParticles(800, 480, 40, new Color(0.8f, 1f, 0.8f, 0.3f));
         stage.addActor(glitchParticles);
 
-        // Centered logo is added in the center table below
-
-        // Root layout
+        // Root layout - centered design
         root = new Table();
         root.setFillParent(true);
         stage.addActor(root);
 
-        // Left: avatar
-        Table left = new Table(); left.pad(20);
+        // Create glitchy title animation
+        createGlitchyTitle();
 
-        // Avatar image and glow
-        Texture avatarTx = femaleSelected ? avatarFemale : avatarMale;
-        Image avatar = (avatarTx != null) ? new Image(avatarTx) : solidPlaceholder(new Color(0.15f, 0.18f, 0.15f, 1f), 96, 128);
-        avatar.setScaling(Scaling.fit);
+        // Create animated start button
+        createAnimatedStartButton();
 
-        // Glow overlay using a semi-transparent white square pulsing
-        Image glow = solidPlaceholder(new Color(1f, 1f, 1f, 0.12f), 64, 64);
-        glow.setColor(1f, 1f, 1f, 0.14f);
-        glow.addAction(Actions.forever(Actions.sequence(
-            Actions.scaleTo(1.08f, 1.08f, 1.0f),
-            Actions.scaleTo(1.0f, 1.0f, 1.0f)
-        )));
+        // Removed subtitle for cleaner look
 
-        Table avatarWrap = new Table();
-        avatarWrap.add(glow).size(110, 110).expandX().center().row();
-        avatarWrap.add(avatar).size(110, 140).padTop(-90f).center();
-        avatarImage = avatar; // keep reference
+        // Center everything vertically
+        root.add().expandY().row();
+        if (titleNormal != null && titleGlitch != null) {
+            root.add(titleImage).size(600, 150).padTop(100).padBottom(20).row();
 
-        // Gender toggle
-        TextButton maleBtn = new TextButton("Male", skin);
-        TextButton femaleBtn = new TextButton("Female", skin);
-        maleBtn.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent event, Actor actor) {
-                femaleSelected = false; updateAvatar();
-            }
-        });
-        femaleBtn.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent event, Actor actor) {
-                femaleSelected = true; updateAvatar();
-            }
-        });
-
-        left.add(avatarWrap).expand().center().row();
-        left.add(maleBtn).padTop(10).left();
-        left.add(femaleBtn).padTop(10).left();
-
-        // Center: logo and subtitle
-        Table center = new Table(); center.padTop(30);
-        if (logoTexture != null) {
-            center.add(new Image(logoTexture)).width(420).height(120).padBottom(10).row();
         } else {
-            Label.LabelStyle logoStyle = new Label.LabelStyle(skin.getFont("default-font"), Color.valueOf("9EE493"));
-            Label logoLbl = new Label("CodeQuest", logoStyle);
-            logoLbl.setFontScale(2.2f);
-            logoLbl.setAlignment(Align.center);
-            center.add(logoLbl).padBottom(10).row();
+            // Add the fallback title label directly - smaller size
+            Label.LabelStyle titleStyle = new Label.LabelStyle(skin.getFont("default-font"), Color.valueOf("9EE493"));
+            Label titleLabel = new Label("CodeQuest", titleStyle);
+            titleLabel.setFontScale(2.0f);
+            titleLabel.setAlignment(Align.center);
+            root.add(titleLabel).padBottom(40).row();
+
         }
-
-        subtitleLabel = new Label("Green Valley — a warm digital meadow. Faint glitches drift in the wind...", skin);
-        subtitleLabel.setColor(Color.valueOf("B6F6C1"));
-        center.add(subtitleLabel).padBottom(20).row();
-
-        // Right: menu options
-        Table right = new Table(); right.pad(20);
-
-        startBtn = new TextButton("Start", skin);
-        loadBtn = new TextButton("Load Game", skin);
-        settingsBtn = new TextButton("Settings", skin);
-        exitBtn = new TextButton("Exit", skin);
-
-        ChangeListener menuHandler = new ChangeListener() {
-            @Override public void changed(ChangeEvent event, Actor actor) {
-                if (actor == startBtn) onStart();
-                else if (actor == loadBtn) onLoad();
-                else if (actor == settingsBtn) onSettings();
-                else if (actor == exitBtn) onExit();
-            }
-        };
-        startBtn.addListener(menuHandler);
-        loadBtn.addListener(menuHandler);
-        settingsBtn.addListener(menuHandler);
-        exitBtn.addListener(menuHandler);
-
-        float w = 220f, h = 44f, pad = 10f;
-        right.add(startBtn).width(w).height(h).pad(pad).row();
-        right.add(loadBtn).width(w).height(h).pad(pad).row();
-        right.add(settingsBtn).width(w).height(h).pad(pad).row();
-        right.add(exitBtn).width(w).height(h).pad(pad).row();
-
-        // Compose root: three columns
-        root.add(left).width(220).growY();
-        root.add(center).grow().center();
-        root.add(right).width(260).growY();
+        if (startButton != null) {
+            root.add(startButtonImage).size(200, 80).padBottom(20).row();
+        } else {
+            // Add the fallback button directly - smaller size
+            startBtn = new TextButton("START", skin);
+            startBtn.setColor(Color.valueOf("9EE493"));
+            startBtn.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent event, Actor actor) {
+                    onStart();
+                }
+            });
+            root.add(startBtn).size(150, 50).padBottom(20).row();
+        }
+        root.add().expandY();
 
         // Input processor
         Gdx.input.setInputProcessor(stage);
     }
 
-    private void updateAvatar() {
-        Texture avatarTx = femaleSelected ? avatarFemale : avatarMale;
-        if (avatarTx != null) {
-            avatarImage.setDrawable(new Image(avatarTx).getDrawable());
+    private void createGlitchyTitle() {
+        if (titleNormal != null && titleGlitch != null) {
+            // Create the normal title image
+            titleImage = new Image(titleNormal);
+            titleImage.setScaling(Scaling.fit);
+
+            // Glitch animation: alternate between normal and glitch frames
+            titleImage.addAction(Actions.forever(Actions.sequence(
+                Actions.delay(2.0f), // Stay normal for 2 seconds
+                Actions.run(() -> {
+                    if (titleImage.getDrawable() != null) {
+                        titleImage.setDrawable(new Image(titleNormal).getDrawable());
+                    }
+                }),
+                Actions.delay(0.1f), // Quick glitch
+                Actions.run(() -> {
+                    if (titleImage.getDrawable() != null) {
+                        titleImage.setDrawable(new Image(titleGlitch).getDrawable());
+                    }
+                }),
+                Actions.delay(0.15f), // Back to normal
+                Actions.run(() -> {
+                    if (titleImage.getDrawable() != null) {
+                        titleImage.setDrawable(new Image(titleNormal).getDrawable());
+                    }
+                }),
+                Actions.delay(0.1f), // Another quick glitch
+                Actions.run(() -> {
+                    if (titleImage.getDrawable() != null) {
+                        titleImage.setDrawable(new Image(titleGlitch).getDrawable());
+                    }
+                }),
+                Actions.delay(0.1f), // Back to normal
+                Actions.run(() -> {
+                    if (titleImage.getDrawable() != null) {
+                        titleImage.setDrawable(new Image(titleNormal).getDrawable());
+                    }
+                })
+            )));
+        } else {
+            // Fallback: placeholder for when assets are missing
+            titleImage = solidPlaceholder(new Color(0.1f, 0.1f, 0.1f, 0.8f), 400, 100);
+        }
+    }
+
+    private void createAnimatedStartButton() {
+        if (startButton != null) {
+            startButtonImage = new Image(startButton);
+            startButtonImage.setScaling(Scaling.fit);
+
+            // Simple pulsing animation
+            startButtonImage.addAction(Actions.forever(Actions.sequence(
+                Actions.scaleTo(1.0f, 1.0f, 1.0f),
+                Actions.scaleTo(1.02f, 1.02f, 1.0f),
+                Actions.scaleTo(1.0f, 1.0f, 1.0f)
+            )));
+
+            // Make it clickable
+            startButtonImage.addListener(new ClickListener() {
+            @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    onStart();
+                }
+            });
+        } else {
+            // Fallback: placeholder for when assets are missing
+            startButtonImage = solidPlaceholder(new Color(0.2f, 0.3f, 0.2f, 0.9f), 200, 60);
         }
     }
 
     private void wireInput() {
-        // Keyboard navigation: Up/Down to move focus, Enter/Space to activate, Esc to exit
-        final TextButton[] buttons = new TextButton[] { startBtn, loadBtn, settingsBtn, exitBtn };
-        stage.setKeyboardFocus(startBtn);
-
+        // Simple keyboard input for the new design
         stage.addListener(new InputListener() {
-            private int focusedIndex = 0;
-
-            private void focusIndex(int idx) {
-                focusedIndex = ((idx % buttons.length) + buttons.length) % buttons.length;
-                stage.setKeyboardFocus(buttons[focusedIndex]);
-            }
-
             @Override public boolean keyDown(InputEvent event, int keycode) {
                 if (keycode == Input.Keys.ESCAPE || keycode == Input.Keys.BACK) {
                     onExit();
                     return true;
                 }
-                if (keycode == Input.Keys.UP) {
-                    focusIndex(focusedIndex - 1);
-                    return true;
-                }
-                if (keycode == Input.Keys.DOWN) {
-                    focusIndex(focusedIndex + 1);
-                    return true;
-                }
                 if (keycode == Input.Keys.ENTER || keycode == Input.Keys.SPACE) {
-                    // Programmatically fire the button's ChangeListener
-                    buttons[focusedIndex].toggle();
+                    onStart();
                     return true;
                 }
                 return false;
@@ -250,23 +249,11 @@ public class MenuScreen implements Screen {
     }
 
     private void onStart() {
-        // Fade out and transition to intro scene
+        // Simple fade out and transition to intro screen
         stage.addAction(Actions.sequence(
             Actions.fadeOut(0.5f),
-            Actions.run(() -> game.setScreen(new IntroScreen(game, femaleSelected)))
+            Actions.run(() -> game.setScreen(new IntroScreen(game)))
         ));
-    }
-
-    private void onLoad() {
-        // TODO: implement load flow
-        subtitleLabel.setText("Load feature coming soon. Prepare your save slots!");
-        subtitleLabel.addAction(Actions.sequence(Actions.alpha(0.6f, 0.15f), Actions.alpha(1f, 0.35f)));
-    }
-
-    private void onSettings() {
-        // TODO: implement settings screen
-        subtitleLabel.setText("Settings incoming: keybinds, audio, pixel scaling, and more.");
-        subtitleLabel.addAction(Actions.sequence(Actions.alpha(0.6f, 0.15f), Actions.alpha(1f, 0.35f)));
     }
 
     private void onExit() {
@@ -277,6 +264,11 @@ public class MenuScreen implements Screen {
     public void show() {
         stage.getRoot().getColor().a = 0f;
         stage.addAction(Actions.fadeIn(0.5f));
+
+        // Start background music
+        if (backgroundMusic != null && !backgroundMusic.isPlaying()) {
+            backgroundMusic.play();
+        }
     }
 
     @Override
@@ -290,15 +282,23 @@ public class MenuScreen implements Screen {
     @Override public void resize(int width, int height) { stage.getViewport().update(width, height, true); }
     @Override public void pause() {}
     @Override public void resume() {}
-    @Override public void hide() {}
+    @Override
+    public void hide() {
+        // Stop music when leaving the menu
+        if (backgroundMusic != null && backgroundMusic.isPlaying()) {
+            backgroundMusic.stop();
+        }
+    }
     @Override
     public void dispose() {
         stage.dispose();
         skin.dispose();
         batch.dispose();
-        if (bgGreenValley != null) bgGreenValley.dispose();
-        if (logoTexture != null) logoTexture.dispose();
-        if (avatarMale != null) avatarMale.dispose();
-        if (avatarFemale != null) avatarFemale.dispose();
+        if (menuBackground != null) menuBackground.dispose();
+        if (titleNormal != null) titleNormal.dispose();
+        if (titleGlitch != null) titleGlitch.dispose();
+        if (startButton != null) startButton.dispose();
+        if (glitchParticles != null) glitchParticles.dispose();
+        if (backgroundMusic != null) backgroundMusic.dispose();
     }
 }
