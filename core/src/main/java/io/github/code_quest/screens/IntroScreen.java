@@ -8,14 +8,16 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.Animation;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.code_quest.Main;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.files.FileHandle;
+import java.util.Comparator;
 
 public class IntroScreen implements Screen {
     private final Main game;
@@ -28,10 +30,10 @@ public class IntroScreen implements Screen {
     private float elapsed;
     private float fadeAlpha = 1.0f;
     private boolean isFadingIn = true;
-    private Animation<TextureRegion> animation;
-    private float stateTime = 0f;
-    private boolean showGif = false;
-    private TextureRegion currentFrame;
+    private final Array<Texture> storyImages = new Array<>();
+    private int currentImageIndex = 0;
+    private float displayTime = 0f;
+    private static final float TIME_PER_IMAGE = 5.0f; // seconds per image
 
     public IntroScreen(Main game) {
         this.game = game;
@@ -43,26 +45,65 @@ public class IntroScreen implements Screen {
         font.setColor(Color.WHITE);
         overlayPixel = createOverlayPixel();
         
-        // Load animation frames
+        // Load story images from 1.png to 18.png
         try {
-            // Create a simple animation with a few frames
-            // Replace these with your actual animation frames
-            TextureRegion[] frames = new TextureRegion[4]; // Example: 4 frames
-            for (int i = 0; i < frames.length; i++) {
-                // Replace with your frame loading logic
-                // For example: frames[i] = new TextureRegion(new Texture(Gdx.files.internal("animation/frame" + i + ".png")));
-                // For now, we'll create colored rectangles as placeholders
-                frames[i] = createColorFrame(1f, 1f, 1f, 1f);
+            // Try multiple possible base directories
+            String[] possibleBaseDirs = {
+                "",  // Current working directory
+                "assets/",
+                "core/assets/",
+                "../assets/",
+                "codeQuest/assets/"
+            };
+            
+            // List of all image filenames in order
+            String[] imageFilenames = {
+                "1 (2).png", "2 (2).png", "3 (2).png", "4 (2).png", "5.png",
+                "6.png", "7.png", "8.png", "9.png", "10.png", "11.png",
+                "12.1.png", "12.2.png", "13.png", "14.png", "15.png",
+                "16.png", "17.png", "18.png"
+            };
+            
+            // Load each image in order
+            for (String filename : imageFilenames) {
+                
+                boolean loaded = false;
+                
+                // Try each possible base directory
+                for (String baseDir : possibleBaseDirs) {
+                        String path = baseDir + "images/gamepic/" + filename;
+                    
+                    // Try internal path first
+                    FileHandle file = Gdx.files.internal(path);
+                    if (!file.exists()) {
+                        // Try external path if internal not found
+                        file = Gdx.files.external(path);
+                    }
+                    
+                    if (file.exists()) {
+                        try {
+                            Texture texture = new Texture(file);
+                            storyImages.add(texture);
+                            Gdx.app.log("IntroScreen", "Loaded: " + path);
+                            loaded = true;
+                            break;
+                        } catch (Exception e) {
+                            Gdx.app.error("IntroScreen", "Error loading " + path + ": " + e.getMessage());
+                        }
+                    }
+                }
+                
+                if (!loaded) {
+                    Gdx.app.error("IntroScreen", "Could not load image: " + filename);
+                }
             }
             
-            // Create animation with 0.1 second frame duration and loop it
-            animation = new Animation<>(0.1f, frames);
-            animation.setPlayMode(Animation.PlayMode.LOOP);
-            showGif = true;
-            stateTime = 0f;
-            
+            if (storyImages.size == 0) {
+                Gdx.app.error("IntroScreen", "No story images were loaded");
+                scheduleNextScreen();
+            }
         } catch (Exception e) {
-            Gdx.app.error("IntroScreen", "Error creating animation: " + e.getMessage());
+            Gdx.app.error("IntroScreen", "Error loading story images: " + e.getMessage());
             e.printStackTrace();
             scheduleNextScreen();
         }
@@ -88,7 +129,7 @@ public class IntroScreen implements Screen {
     @Override
     public void render(float delta) {
         elapsed += delta;
-
+        
         // Handle fade in/out
         if (isFadingIn) {
             fadeAlpha = Math.max(0, fadeAlpha - delta);
@@ -96,20 +137,35 @@ public class IntroScreen implements Screen {
                 isFadingIn = false;
             }
         }
-
-        // Handle skip button press
-        if (showGif && !transitionScheduled && (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.justTouched())) {
-            showGif = false;
-            scheduleNextScreen();
-        }
-
-        // Update animation state time
-        if (showGif) {
-            stateTime += delta;
-            // Show the animation for 5 seconds
-            if (stateTime >= 5.0f) {
-                showGif = false;
+        
+        // Handle input for advancing the story
+        if (Gdx.input.justTouched() || Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            if (currentImageIndex < storyImages.size - 1) {
+                // Go to next image
+                currentImageIndex++;
+                displayTime = 0f;
+                isFadingIn = true;
+                fadeAlpha = 1.0f;
+            } else if (!transitionScheduled) {
+                // Last image - go to game
                 scheduleNextScreen();
+                return;
+            }
+        }
+        
+        // Auto-advance after TIME_PER_IMAGE seconds
+        if (currentImageIndex < storyImages.size) {
+            displayTime += delta;
+            if (displayTime >= TIME_PER_IMAGE) {
+                if (currentImageIndex < storyImages.size - 1) {
+                    currentImageIndex++;
+                    displayTime = 0f;
+                    isFadingIn = true;
+                    fadeAlpha = 1.0f;
+                } else if (!transitionScheduled) {
+                    scheduleNextScreen();
+                    return;
+                }
             }
         }
 
@@ -120,22 +176,19 @@ public class IntroScreen implements Screen {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
 
-        if (!showGif) {
-            float base = 0.2f + 0.1f * MathUtils.sin(elapsed * 1.2f);
-            batch.setColor(0.08f + base, 0.08f, 0.16f + base, 1f);
-            batch.draw(overlayPixel, 0f, 0f, viewport.getWorldWidth(), viewport.getWorldHeight());
-            batch.setColor(1f, 1f, 1f, 1f);
-        }
+        // Draw background
+        float base = 0.2f + 0.1f * MathUtils.sin(elapsed * 1.2f);
+        batch.setColor(0.08f + base, 0.08f, 0.16f + base, 1f);
+        batch.draw(overlayPixel, 0f, 0f, viewport.getWorldWidth(), viewport.getWorldHeight());
+        batch.setColor(1f, 1f, 1f, 1f);
 
-        // Draw the animation if it should be shown
-        if (showGif && animation != null) {
-            // Get current frame of animation
-            currentFrame = animation.getKeyFrame(stateTime, true);
-            
-            if (currentFrame != null) {
+        // Draw the current story image with fade effect
+        if (currentImageIndex < storyImages.size) {
+            Texture currentImage = storyImages.get(currentImageIndex);
+            if (currentImage != null) {
                 float width = viewport.getWorldWidth();
                 float height = viewport.getWorldHeight();
-                float aspectRatio = (float)currentFrame.getRegionWidth() / currentFrame.getRegionHeight();
+                float aspectRatio = (float)currentImage.getWidth() / currentImage.getHeight();
                 float drawWidth = width;
                 float drawHeight = width / aspectRatio;
                 
@@ -147,16 +200,27 @@ public class IntroScreen implements Screen {
                 float x = (width - drawWidth) / 2f;
                 float y = (height - drawHeight) / 2f;
                 
-                batch.draw(currentFrame, x, y, drawWidth, drawHeight);
+                // Apply fade effect
+                batch.setColor(1, 1, 1, 1 - fadeAlpha);
+                
+                batch.draw(currentImage, x, y, drawWidth, drawHeight);
+                batch.setColor(1, 1, 1, 1); // Reset color
             }
         }
 
-        float pulse = 0.25f + 0.15f * MathUtils.sin(elapsed * 6f);
-        batch.setColor(1f, 0.2f, 0.4f, pulse);
-        batch.draw(overlayPixel, 0f, 0f, viewport.getWorldWidth(), viewport.getWorldHeight());
-        batch.setColor(0.2f, 0.6f, 1f, pulse * 0.6f);
-        batch.draw(overlayPixel, 0f, 0f, viewport.getWorldWidth(), viewport.getWorldHeight());
-        batch.setColor(Color.WHITE);
+        // Draw continue prompt on the last image
+        if (currentImageIndex == storyImages.size - 1) {
+            String continueText = "Tap or press ENTER to continue";
+            float textWidth = font.getLineHeight() * 10; // Approximate width
+            float x = (viewport.getWorldWidth() - textWidth) / 2;
+            float y = 50; // Position from bottom
+            
+            // Fading effect for the continue prompt
+            float alpha = 0.5f + 0.5f * MathUtils.sin(elapsed * 2);
+            font.setColor(1, 1, 1, alpha);
+            font.draw(batch, continueText, x, y);
+            font.setColor(Color.WHITE);
+        }
 
         float textAlpha = 0.45f + 0.4f * MathUtils.sin(elapsed * 4f);
         font.setColor(1f, 1f, 1f, MathUtils.clamp(textAlpha, 0f, 1f));
@@ -182,29 +246,21 @@ public class IntroScreen implements Screen {
 
     @Override public void pause() {}
     @Override public void resume() {}
-    private TextureRegion createColorFrame(float r, float g, float b, float a) {
-        Pixmap pixmap = new Pixmap(100, 100, Pixmap.Format.RGBA8888);
-        pixmap.setColor(r, g, b, a);
-        pixmap.fill();
-        Texture texture = new Texture(pixmap);
-        pixmap.dispose();
-        return new TextureRegion(texture);
-    }
     
     @Override public void hide() {}
 
     @Override
     public void dispose() {
-        // Clean up resources
-        if (animation != null) {
-            for (TextureRegion frame : animation.getKeyFrames()) {
-                if (frame != null && frame.getTexture() != null) {
-                    frame.getTexture().dispose();
-                }
-            }
-        }
         batch.dispose();
         font.dispose();
         overlayPixel.dispose();
+        if (storyImages != null) {
+            for (Texture texture : storyImages) {
+                if (texture != null) {
+                    texture.dispose();
+                }
+            }
+            storyImages.clear();
+        }
     }
 }
