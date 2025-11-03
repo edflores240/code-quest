@@ -159,21 +159,21 @@ public class IntroScreen implements Screen {
             "Villagers thought that their lives were perfect and could not \nget any better as long as they maintained their \nvillage. Or so they thought...", // 2
             "When unknown meteors came falling from the skies above...", // 3
             "Heading straight into their world...", // 4
-            "All the villagers could do is watch...", // 5
-            "And hope that everything would be okay...", // 6
-            "The unidentified meteors fell past the green village...", // 7
-            "Passing through the desert and volcano...", // 8
+            "All the villagers could do is watch in terror...", // 5
+            "and hope that everything would be ok. as the unidentified meteor \nfell into the different parts of their world...", // 6
+            "Every part of the Dessert...", // 7
+            "The Icy mountain...", // 8
             "And finally crashed near the village of the ice...", // 9
-            "Just like that... their peaceful world turned into chaos...", // 10
-            "The final confrontation begins...", // 11
-            "Code bug-like aliens destroyed their world...", // 12.1
-            "Taking over everything and driving everyone away from \ntheir home, forcing them into hiding...", // 12.2
-            "As time passed, a hero emerged from the darkness. By studying \nthose bugs for years, the hero gained the knowledge needed \nto defeat the evil code bug aliens.", // 13
-            "The hero mustered the courage and embarked on a journey to \ndefeat the ruler of the code alien bugs...", // 14
-            "And return the world that everyone once knew. The hero swore...", // 15
-            "Code bug-like aliens destroyed their world...", // 16
-            "The end of the beginning...", // 17
-            "To be continued..."  // 18
+            "The Swamp Village...", // 10
+            "Just like that... their peaceful world turned into chaos...", // 11
+            "The Volcanic Area...", // 12.1
+            "As the world fall into chaos and destruction, forcing \neveryone into hiding. but, Except for one.", // 12.2
+            "A hero mustered the courage to embarked on a journey to \nfind out the reason behind the chaos and restore the world that everyone knew. The hero swore...", // 13
+            "Hero: I will defeat the ruler of these aliens and find \nout what the origin of those meteors, I will return this \nworld to what it was once", // 14
+            "As the hero began tracking down the source of this calamity. \nThe hero encountered something...", // 15
+            "due to the meteors, code bug like aliens started roaming \ntheir world bringing destruction into their way", // 16
+            "as the last hope of humanity, it is up for the hero to face \nthem and cleanse the world from these bug aliens and return the tranquil world.", // 17
+            "The Story just beginning..."  // 18
         };
         storyTexts.addAll(texts);
 
