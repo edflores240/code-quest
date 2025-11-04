@@ -20,6 +20,8 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.code_quest.Main;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector2;
 import java.util.Comparator;
 
 public class IntroScreen implements Screen {
@@ -314,6 +316,7 @@ public class IntroScreen implements Screen {
         batch.draw(overlayPixel, 0f, 0f, viewport.getWorldWidth(), viewport.getWorldHeight());
         batch.setColor(1f, 1f, 1f, 1f);
 
+
         // Draw the current story image with fade effect
         if (currentImageIndex < storyImages.size) {
             Texture currentImage = storyImages.get(currentImageIndex);
@@ -436,12 +439,27 @@ public class IntroScreen implements Screen {
         batch.end();
     }
 
+    private Vector2 getMousePosition() {
+        float mouseX = Gdx.input.getX();
+        float mouseY = Gdx.input.getY();
+        Vector2 worldCoords = viewport.unproject(new Vector2(mouseX, mouseY));
+        return worldCoords;
+    }
+
     private void scheduleNextScreen() {
-        if (transitionScheduled) {
-            return;
+        if (!transitionScheduled) {
+            transitionScheduled = true;
+            isFadingIn = false;
+            
+            // Schedule the screen transition on the next frame
+            Gdx.app.postRunnable(new Runnable() {
+                @Override
+                public void run() {
+                    game.setScreen(new GameScreen(game));
+                    dispose();
+                }
+            });
         }
-        transitionScheduled = true;
-        game.setScreen(new GameScreen(game));
     }
 
     @Override
@@ -468,19 +486,14 @@ public class IntroScreen implements Screen {
         batch.dispose();
         font.dispose();
         overlayPixel.dispose();
+        for (Texture texture : storyImages) {
+            if (texture != null) {
+                texture.dispose();
+            }
+        }
         if (textBoxGreen != null) textBoxGreen.dispose();
         if (textBoxViolet != null) textBoxViolet.dispose();
         if (textBoxBlue != null) textBoxBlue.dispose();
-        greenPixmap.dispose();
-        violetPixmap.dispose();
-        bluePixmap.dispose();
-        if (storyImages != null) {
-            for (Texture texture : storyImages) {
-                if (texture != null) {
-                    texture.dispose();
-                }
-            }
-            storyImages.clear();
-        }
+        storyImages.clear();
     }
 }
