@@ -48,6 +48,14 @@ public class IntroScreen implements Screen {
     private float displayTime = 0f;
     private static final float TIME_PER_IMAGE = 5.0f; // seconds per image
 
+    // Skip button properties
+    private Rectangle skipButtonBounds;
+    private float skipButtonPulse = 0f;
+    private boolean skipButtonHovered = false;
+    private float skipButtonClickEffect = 0f;
+    private boolean skipButtonInitialized = false;
+    private final ShapeRenderer shapeRenderer;
+
     public IntroScreen(Main game) {
         this.game = game;
         camera = new OrthographicCamera();
@@ -57,6 +65,9 @@ public class IntroScreen implements Screen {
         font.getData().setScale(1.25f);
         font.setColor(Color.WHITE);
         overlayPixel = createOverlayPixel();
+        shapeRenderer = new ShapeRenderer();
+
+        // Initialize skip button will be done in show() method after viewport is set up
 
         // Try to load text box textures
         try {
@@ -244,6 +255,20 @@ public class IntroScreen implements Screen {
     }
 
 
+    private void setupSkipButton() {
+        // Prevent multiple initialization
+        if (skipButtonInitialized) return;
+        
+        // Position skip button in upper left corner
+        float buttonWidth = 120;
+        float buttonHeight = 40;
+        float buttonX = 20; // Upper left position
+        float buttonY = viewport.getWorldHeight() - buttonHeight - 20;
+        
+        skipButtonBounds = new Rectangle(buttonX, buttonY, buttonWidth, buttonHeight);
+        skipButtonInitialized = true;
+    }
+
     private Texture createOverlayPixel() {
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixmap.setColor(Color.WHITE);
@@ -258,11 +283,26 @@ public class IntroScreen implements Screen {
         viewport.update(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), true);
         camera.position.set(viewport.getWorldWidth() * 0.5f, viewport.getWorldHeight() * 0.5f, 0f);
         camera.update();
+        
+        // Initialize skip button now that viewport is properly set up
+        setupSkipButton();
     }
 
     @Override
     public void render(float delta) {
         elapsed += delta;
+
+        // Update skip button animations
+        // DISABLED - starting fresh with simple approach
+        // skipButtonPulse += delta * 3f;
+        // if (skipButtonClickEffect > 0) {
+        //     skipButtonClickEffect -= delta * 2f;
+        // }
+
+        // Check mouse hover for skip button
+        // DISABLED - starting fresh with simple approach
+        // Vector2 mousePos = getMousePosition();
+        // skipButtonHovered = skipButtonBounds != null && skipButtonBounds.contains(mousePos);
 
         // Handle fade in/out
         if (isFadingIn) {
@@ -274,6 +314,14 @@ public class IntroScreen implements Screen {
 
         // Handle input for advancing the story
         if (Gdx.input.justTouched() || Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            // Check if skip button was clicked
+            // DISABLED - using simple ESC key instead
+            // if (skipButtonHovered) {
+            //     skipButtonClickEffect = 1f;
+            //     scheduleNextScreen();
+            //     return;
+            // }
+            
             if (currentImageIndex < storyImages.size - 1) {
                 // Go to next image
                 currentImageIndex++;
@@ -285,6 +333,12 @@ public class IntroScreen implements Screen {
                 scheduleNextScreen();
                 return;
             }
+        }
+
+        // Simple TAB key to skip
+        if (Gdx.input.isKeyJustPressed(Input.Keys.TAB)) {
+            scheduleNextScreen();
+            return;
         }
 
         // Auto-advance after TIME_PER_IMAGE seconds
@@ -436,6 +490,11 @@ public class IntroScreen implements Screen {
         font.setColor(1f, 1f, 1f, MathUtils.clamp(textAlpha, 0f, 1f));
         font.draw(batch, "Press Enter or Tap to skip", viewport.getWorldWidth() * 0.25f, 50f); */
 
+        // Draw skip button
+        // Simple text-based skip instead of complex button
+        font.setColor(1f, 1f, 1f, 0.7f);
+        font.draw(batch, "Press TAB to skip", 20, viewport.getWorldHeight() - 20);
+
         batch.end();
     }
 
@@ -444,6 +503,41 @@ public class IntroScreen implements Screen {
         float mouseY = Gdx.input.getY();
         Vector2 worldCoords = viewport.unproject(new Vector2(mouseX, mouseY));
         return worldCoords;
+    }
+
+    private void drawSkipButton() {
+        // Skip drawing if button bounds or shapeRenderer haven't been initialized yet
+        if (skipButtonBounds == null || shapeRenderer == null) return;
+        
+        // Draw simple button background
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        
+        // Main button background
+        shapeRenderer.setColor(0.9f, 0.3f, 0.1f, 0.8f);
+        shapeRenderer.rect(skipButtonBounds.x, skipButtonBounds.y, skipButtonBounds.width, skipButtonBounds.height);
+        
+        // Button border
+        shapeRenderer.setColor(1f, 0.7f, 0.2f, 1f);
+        shapeRenderer.rect(skipButtonBounds.x, skipButtonBounds.y, skipButtonBounds.width, 2);
+        shapeRenderer.rect(skipButtonBounds.x, skipButtonBounds.y + skipButtonBounds.height - 2, skipButtonBounds.width, 2);
+        shapeRenderer.rect(skipButtonBounds.x, skipButtonBounds.y, 2, skipButtonBounds.height);
+        shapeRenderer.rect(skipButtonBounds.x + skipButtonBounds.width - 2, skipButtonBounds.y, 2, skipButtonBounds.height);
+        
+        shapeRenderer.end();
+        
+        // Draw button text
+        batch.begin();
+        font.getData().setScale(1.0f);
+        font.setColor(1f, 1f, 1f, 1f);
+        
+        // Center text in button
+        float textX = skipButtonBounds.x + skipButtonBounds.width / 2 - 20;
+        float textY = skipButtonBounds.y + skipButtonBounds.height / 2 + font.getCapHeight() / 2;
+        
+        font.draw(batch, "SKIP", textX, textY);
+        font.setColor(Color.WHITE);
+        batch.end();
     }
 
     private void scheduleNextScreen() {
@@ -486,6 +580,7 @@ public class IntroScreen implements Screen {
         batch.dispose();
         font.dispose();
         overlayPixel.dispose();
+        shapeRenderer.dispose();
         for (Texture texture : storyImages) {
             if (texture != null) {
                 texture.dispose();
