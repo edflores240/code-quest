@@ -3,6 +3,7 @@ package io.github.code_quest.screens;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
@@ -17,6 +18,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.code_quest.Main;
+import io.github.code_quest.audio.BackgroundMusicManager;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -42,6 +44,10 @@ public class GameScreen implements Screen {
     private float editCursorBlink = 0f;
     private final ShapeRenderer shapeRenderer;
 
+    private final Sound selectionSound;
+    private final Sound confirmSound;
+    private boolean musicRegistered;
+
     // Skip button properties
     private Rectangle skipButtonBounds;
     private float skipButtonPulse = 0f;
@@ -53,6 +59,8 @@ public class GameScreen implements Screen {
     private boolean isTransitioning = false;
     private float transitionTime = 0f;
     private static final float TRANSITION_DURATION = 0.5f;
+
+    private static final String BACKGROUND_MUSIC_PATH = "assets/sounds/loadingscreenmusic.wav";
 
     // Input handling
     private int selectedIndex = 0;
@@ -122,6 +130,25 @@ public class GameScreen implements Screen {
         // Initialize skip button will be done in show() method after viewport is set up
 
         stateTime = 0f;
+
+        selectionSound = loadSoundIfExists("assets/sounds/selectingcharacter.mp3", "GameScreen");
+        confirmSound = loadSoundIfExists("assets/sounds/afterselectingcharacter (1).mp3", "GameScreen");
+
+        BackgroundMusicManager.playLoop(BACKGROUND_MUSIC_PATH, 0.5f);
+        musicRegistered = true;
+    }
+
+    private Sound loadSoundIfExists(String path, String tag) {
+        if (Gdx.files.internal(path).exists()) {
+            try {
+                return Gdx.audio.newSound(Gdx.files.internal(path));
+            } catch (Exception e) {
+                Gdx.app.error(tag, "Failed to load sound: " + path, e);
+            }
+        } else {
+            Gdx.app.error(tag, "Missing sound: " + path);
+        }
+        return null;
     }
 
     private Texture createWhitePixel() {
@@ -168,7 +195,7 @@ public class GameScreen implements Screen {
         characterKeys = new ArrayList<>();
 
         float cardWidth = 150f;  // Compact card width
-        float cardHeight = 230f; // Slightly shorter cards
+        float cardHeight = 190f; // Slightly shorter cards
         float spacing = 120f;     // Comfortable distance between cards
         float centerY = 95f;     // Balanced vertical placement
 
@@ -337,7 +364,7 @@ public class GameScreen implements Screen {
         // Title shadow for depth
         titleFont.setColor(0f, 0f, 0f, 0.4f);
         titleFont.draw(batch, title, titleX + 3f, titleY - 3f);
-
+        
         // Main title with gradient effect
         titleFont.setColor(1f, 1f, 1f, 1f);
         titleFont.draw(batch, title, titleX, titleY);
@@ -347,7 +374,7 @@ public class GameScreen implements Screen {
         GlyphLayout subLayout = new GlyphLayout(font, subtitle);
         float subX = (viewport.getWorldWidth() - subLayout.width) / 2f;
         float subY = titleY - 50f;
-
+        
         font.setColor(0.7f, 0.7f, 0.7f, 1f);
         font.draw(batch, subtitle, subX, subY);
 
@@ -411,7 +438,7 @@ public class GameScreen implements Screen {
             Color selectColor = card.accentColor.cpy();
             selectColor.a = card.selectProgress;
             shapeRenderer.setColor(selectColor);
-
+            
             // Top border
             shapeRenderer.rect(x, y + h - borderThickness, w, borderThickness);
             // Bottom border
@@ -455,7 +482,7 @@ public class GameScreen implements Screen {
 
         // Center character in card
         float charX = x + (w - charWidth) / 2;
-        float charY = y + (h - charHeight) / 2 + 20f;
+        float charY = y + (h - charHeight) / 2 + 15f;
 
         // Floating animation
         float floatOffset = MathUtils.sin(stateTime * 2f + (card.characterKey.equals("male") ? 0 : MathUtils.PI)) * 3f;
@@ -486,7 +513,7 @@ public class GameScreen implements Screen {
         font.getData().setScale(1.6f);
         GlyphLayout nameLayout = new GlyphLayout(font, card.displayName);
         float nameX = x + (w - nameLayout.width) / 2;
-        float nameY = y + 35f;
+        float nameY = y + 30f;
 
         // Name shadow
         font.setColor(0f, 0f, 0f, 0.6f);
@@ -505,7 +532,7 @@ public class GameScreen implements Screen {
             GlyphLayout selectLayout = new GlyphLayout(font, selectText);
             float selectX = x + (w - selectLayout.width) / 2;
             float selectY = y + h - 15f;
-
+            
             float pulse = 0.6f + 0.4f * MathUtils.sin(selectionPulse * 4f);
             font.setColor(1f, 1f, 1f, pulse * card.selectProgress);
             font.draw(batch, selectText, selectX, selectY);
@@ -582,7 +609,8 @@ public class GameScreen implements Screen {
             if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
                 // Save the name and proceed to game
                 if (!playerName.trim().isEmpty()) {
-                    game.setScreen(new GreenValleyScreen(game, playerName.trim()));
+                    // TODO: Implement new map screen
+                    // game.setScreen(new GreenValleyScreen(game, playerName.trim()));
                 }
                 return;
             } else if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
@@ -604,7 +632,8 @@ public class GameScreen implements Screen {
                             playerName = text.substring(0, Math.min(text.length(), 12));
                             // Auto-confirm when dialog is closed with text
                             if (!playerName.trim().isEmpty()) {
-                                game.setScreen(new GreenValleyScreen(game, playerName.trim()));
+                                // TODO: Implement new map screen
+                                // game.setScreen(new GreenValleyScreen(game, playerName.trim()));
                             } else {
                                 isEditingName = false;
                             }
@@ -632,6 +661,7 @@ public class GameScreen implements Screen {
         // Handle keyboard input with cooldown
         keyCooldown -= Gdx.graphics.getDeltaTime();
         boolean keyPressed = false;
+        boolean selectionChanged = false;
 
         if (keyCooldown <= 0) {
             // Arrow key navigation
@@ -642,6 +672,7 @@ public class GameScreen implements Screen {
                         selectedCharacter = characterKeys.get(selectedIndex);
                         hoveredCharacter = selectedCharacter; // Update hover state for animation
                         keyPressed = true;
+                        selectionChanged = true;
                     }
                 }
             } else if (Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D)) {
@@ -651,6 +682,7 @@ public class GameScreen implements Screen {
                         selectedCharacter = characterKeys.get(selectedIndex);
                         hoveredCharacter = selectedCharacter; // Update hover state for animation
                         keyPressed = true;
+                        selectionChanged = true;
                     }
                 }
             } else if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
@@ -675,6 +707,10 @@ public class GameScreen implements Screen {
                     }
                 }
             }
+
+            if (selectionChanged && selectionSound != null) {
+                selectionSound.play(0.7f);
+            }
         }
 
         // ENTER/SPACE key to select character and go to customization
@@ -687,7 +723,9 @@ public class GameScreen implements Screen {
             //     game.setScreen(new GreenValleyScreen(game, "Player"));
             //     return;
             // }
-
+            if (confirmSound != null) {
+                confirmSound.play(0.7f);
+            }
             Gdx.app.log("GameScreen", "Selected character: " + selectedCharacter + ", going to customization");
             game.setScreen(new CharacterCustomizationScreen(game, selectedCharacter));
             return;
@@ -716,9 +754,10 @@ public class GameScreen implements Screen {
                 String trimmedName = playerName.trim();
                 if (!trimmedName.isEmpty()) {
                     try {
-                        game.setScreen(new GreenValleyScreen(game, trimmedName));
+                        // TODO: Implement new map screen
+                        // game.setScreen(new GreenValleyScreen(game, trimmedName));
                     } catch (Exception e) {
-                        Gdx.app.error("GameScreen", "Error transitioning to GreenValleyScreen: " + e.getMessage());
+                        Gdx.app.error("GameScreen", "Error transitioning to new map screen: " + e.getMessage());
                         isEditingName = false; // Go back to character selection on error
                     }
                 } else {
@@ -780,6 +819,12 @@ public class GameScreen implements Screen {
                 if (entry.getValue().bounds.contains(mousePos)) {
                     selectedCharacter = entry.getKey();
                     selectedIndex = index;
+                    if (selectionSound != null) {
+                        selectionSound.play(0.7f);
+                    }
+                    if (confirmSound != null) {
+                        confirmSound.play(0.7f);
+                    }
                     // Go to customization when a character is clicked
                     game.setScreen(new CharacterCustomizationScreen(game, selectedCharacter));
                     return;
@@ -802,6 +847,11 @@ public class GameScreen implements Screen {
 
         // Initialize skip button now that viewport is properly set up
         setupSkipButton();
+
+        if (!musicRegistered) {
+            BackgroundMusicManager.playLoop(BACKGROUND_MUSIC_PATH, 0.5f);
+            musicRegistered = true;
+        }
     }
 
     @Override
@@ -811,7 +861,12 @@ public class GameScreen implements Screen {
     public void resume() {}
 
     @Override
-    public void hide() {}
+    public void hide() {
+        if (musicRegistered) {
+            BackgroundMusicManager.release();
+            musicRegistered = false;
+        }
+    }
 
     private void drawSkipButton() {
         // Skip drawing if button bounds or shapeRenderer haven't been initialized yet
@@ -870,5 +925,15 @@ public class GameScreen implements Screen {
         font.dispose();
         titleFont.dispose();
         shapeRenderer.dispose();
+        if (selectionSound != null) {
+            selectionSound.dispose();
+        }
+        if (confirmSound != null) {
+            confirmSound.dispose();
+        }
+        if (musicRegistered) {
+            BackgroundMusicManager.release();
+            musicRegistered = false;
+        }
     }
 }

@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.audio.Music;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
@@ -48,6 +49,8 @@ public class MenuScreen implements Screen {
     private TextButton startBtn;
     private ModernGlitchParticles glitchParticles;
     private Music backgroundMusic;
+    private Sound confirmSound;
+    private boolean startTriggered;
 
 
     public MenuScreen(Main game) {
@@ -63,6 +66,7 @@ public class MenuScreen implements Screen {
 
         loadOptionalAssets();
         loadMusic();
+        loadSfx();
         buildUI();
         wireInput();
     }
@@ -81,6 +85,18 @@ public class MenuScreen implements Screen {
             backgroundMusic = Gdx.audio.newMusic(Gdx.files.internal("sounds/loadingscreenmusic.wav"));
             backgroundMusic.setLooping(true);
             backgroundMusic.setVolume(0.5f); // Set volume to 50%
+        }
+    }
+
+    private void loadSfx() {
+        if (Gdx.files.internal("assets/sounds/afterselectingcharacter (1).mp3").exists()) {
+            try {
+                confirmSound = Gdx.audio.newSound(Gdx.files.internal("assets/sounds/afterselectingcharacter (1).mp3"));
+            } catch (Exception e) {
+                Gdx.app.error("MenuScreen", "Failed to load start sound", e);
+            }
+        } else {
+            Gdx.app.error("MenuScreen", "Missing start sound: assets/sounds/afterselectingcharacter (1).mp3");
         }
     }
 
@@ -249,6 +265,13 @@ public class MenuScreen implements Screen {
     }
 
     private void onStart() {
+        if (startTriggered) {
+            return;
+        }
+        startTriggered = true;
+        if (confirmSound != null) {
+            confirmSound.play(0.7f);
+        }
         // Simple fade out and transition to intro screen
         stage.addAction(Actions.sequence(
             Actions.fadeOut(0.5f),
@@ -264,6 +287,7 @@ public class MenuScreen implements Screen {
     public void show() {
         stage.getRoot().getColor().a = 0f;
         stage.addAction(Actions.fadeIn(0.5f));
+        startTriggered = false;
 
         // Start background music
         if (backgroundMusic != null && !backgroundMusic.isPlaying()) {
@@ -300,5 +324,6 @@ public class MenuScreen implements Screen {
         if (startButton != null) startButton.dispose();
         if (glitchParticles != null) glitchParticles.dispose();
         if (backgroundMusic != null) backgroundMusic.dispose();
+        if (confirmSound != null) confirmSound.dispose();
     }
 }
