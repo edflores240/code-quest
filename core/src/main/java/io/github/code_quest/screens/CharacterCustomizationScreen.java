@@ -3,6 +3,7 @@ package io.github.code_quest.screens;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
@@ -17,6 +18,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.code_quest.Main;
+import io.github.code_quest.audio.BackgroundMusicManager;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -37,6 +39,9 @@ public class CharacterCustomizationScreen implements Screen {
     private float stateTime;
     private float selectionPulse = 0f;
     private final ShapeRenderer shapeRenderer;
+    private final Sound typingSound;
+    private final Sound confirmSound;
+    private boolean musicRegistered;
 
     // Input fields
     private String playerName = "";
@@ -54,6 +59,7 @@ public class CharacterCustomizationScreen implements Screen {
     private boolean isTransitioning = false;
     private float transitionTime = 0f;
     private static final float TRANSITION_DURATION = 0.5f;
+    private Screen pendingScreen;
 
     // Background particles
     private static final int PARTICLE_COUNT = 50;
@@ -70,6 +76,8 @@ public class CharacterCustomizationScreen implements Screen {
     private final float[] hexY = new float[HEXAGON_COUNT];
     private final float[] hexRotation = new float[HEXAGON_COUNT];
     private final float[] hexScale = new float[HEXAGON_COUNT];
+
+    private static final String BACKGROUND_MUSIC_PATH = "assets/sounds/loadingscreenmusic.wav";
 
     public CharacterCustomizationScreen(Main game, String selectedCharacter) {
         this.game = game;
@@ -120,6 +128,25 @@ public class CharacterCustomizationScreen implements Screen {
         initializeHexagons();
 
         stateTime = 0f;
+
+        typingSound = loadSoundIfExists("assets/sounds/soud/typingletters.mp3", "CharacterCustomizationScreen");
+        confirmSound = loadSoundIfExists("assets/sounds/afterselectingcharacter (1).mp3", "CharacterCustomizationScreen");
+
+        BackgroundMusicManager.playLoop(BACKGROUND_MUSIC_PATH, 0.5f);
+        musicRegistered = true;
+    }
+
+    private Sound loadSoundIfExists(String path, String tag) {
+        if (Gdx.files.internal(path).exists()) {
+            try {
+                return Gdx.audio.newSound(Gdx.files.internal(path));
+            } catch (Exception e) {
+                Gdx.app.error(tag, "Failed to load sound: " + path, e);
+            }
+        } else {
+            Gdx.app.error(tag, "Missing sound: " + path);
+        }
+        return null;
     }
 
     private Texture createWhitePixel() {
@@ -216,9 +243,15 @@ public class CharacterCustomizationScreen implements Screen {
         // Update transition animations
         if (isTransitioning) {
             transitionTime += delta;
-            if (transitionTime >= TRANSITION_DURATION) {
-                isTransitioning = false;
-                transitionTime = 0f;
+            if (transitionTime >= TRANSITION_DURATION && pendingScreen != null) {
+                final Screen next = pendingScreen;
+                pendingScreen = null;
+                Gdx.app.postRunnable(new Runnable() {
+                    @Override
+                    public void run() {
+                        game.setScreen(next);
+                    }
+                });
             }
         }
 
@@ -604,11 +637,15 @@ public class CharacterCustomizationScreen implements Screen {
     private void handleInput() {
         if (isTransitioning) return;
 
+        boolean playTyping = false;
+
         // Navigate between fields
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) {
             currentField = Math.max(0, currentField - 1);
+            playTyping = true;
         } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) {
             currentField = Math.min(2, currentField + 1);
+            playTyping = true;
         }
 
         // Handle text input for current field
@@ -618,9 +655,13 @@ public class CharacterCustomizationScreen implements Screen {
         if (Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE) && currentText.length() > 0) {
             currentText = currentText.substring(0, currentText.length() - 1);
             setFieldText(currentField, currentText);
+            playTyping = true;
         }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE) && currentText.length() == 0) {
+            if (typingSound != null) {
+                typingSound.play(0.6f);
+            }
             game.setScreen(new GameScreen(game));
             return;
         }
@@ -640,9 +681,13 @@ public class CharacterCustomizationScreen implements Screen {
                         // Only allow numbers for age
                         if (Character.isDigit(c)) {
                             setFieldText(currentField, currentText + c);
+                            playTyping = true;
+                            break;
                         }
                     } else {
                         setFieldText(currentField, currentText + c);
+                        playTyping = true;
+                        break;
                     }
                 }
             }
@@ -654,6 +699,8 @@ public class CharacterCustomizationScreen implements Screen {
                 if (Gdx.input.isKeyJustPressed(i) && currentText.length() < 3) {
                     char c = (char) ('0' + (i - Input.Keys.NUM_0));
                     setFieldText(currentField, currentText + c);
+                    playTyping = true;
+                    break;
                 }
             }
         }
@@ -661,28 +708,37 @@ public class CharacterCustomizationScreen implements Screen {
         // Handle space key
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) && currentField != 1 && currentText.length() < 20) {
             setFieldText(currentField, currentText + " ");
+            playTyping = true;
         }
 
         // ENTER to continue
         if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
             if (!playerName.trim().isEmpty() && !playerAge.trim().isEmpty() && !playerCourse.trim().isEmpty()) {
+                if (confirmSound != null) {
+                    confirmSound.play(0.7f);
+                }
                 // Start transition to game
                 isTransitioning = true;
                 transitionTime = 0f;
-
-                // After transition, go to game screen
-                Gdx.app.postRunnable(new Runnable() {
-                    @Override
-                    public void run() {
-                        game.setScreen(new GreenValleyScreen(game, playerName.trim()));
-                    }
-                });
+                String characterKey = selectedCharacter != null ? selectedCharacter : "male";
+                pendingScreen = new GreenValleyScreen(game, characterKey);
+                playTyping = false;
+            } else {
+                playTyping = true; // still provide feedback for incomplete submission
             }
         }
 
         // ESC to go back
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            if (typingSound != null) {
+                typingSound.play(0.6f);
+            }
             game.setScreen(new GameScreen(game));
+            return;
+        }
+
+        if (playTyping && typingSound != null) {
+            typingSound.play(0.6f);
         }
     }
 
@@ -696,6 +752,11 @@ public class CharacterCustomizationScreen implements Screen {
         currentField = 0;
         isTransitioning = false;
         transitionTime = 0f;
+
+        if (!musicRegistered) {
+            BackgroundMusicManager.playLoop(BACKGROUND_MUSIC_PATH, 0.5f);
+            musicRegistered = true;
+        }
     }
 
     @Override
@@ -705,7 +766,12 @@ public class CharacterCustomizationScreen implements Screen {
     public void resume() {}
 
     @Override
-    public void hide() {}
+    public void hide() {
+        if (musicRegistered) {
+            BackgroundMusicManager.release();
+            musicRegistered = false;
+        }
+    }
 
     @Override
     public void dispose() {
@@ -730,5 +796,15 @@ public class CharacterCustomizationScreen implements Screen {
         titleFont.dispose();
         glitchFont.dispose();
         shapeRenderer.dispose();
+        if (typingSound != null) {
+            typingSound.dispose();
+        }
+        if (confirmSound != null) {
+            confirmSound.dispose();
+        }
+        if (musicRegistered) {
+            BackgroundMusicManager.release();
+            musicRegistered = false;
+        }
     }
 }

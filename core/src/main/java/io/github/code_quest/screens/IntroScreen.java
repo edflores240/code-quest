@@ -3,6 +3,7 @@ package io.github.code_quest.screens;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -47,6 +48,7 @@ public class IntroScreen implements Screen {
     private int currentImageIndex = 0;
     private float displayTime = 0f;
     private static final float TIME_PER_IMAGE = 5.0f; // seconds per image
+    private final Music backgroundMusic;
 
     // Skip button properties
     private Rectangle skipButtonBounds;
@@ -252,6 +254,21 @@ public class IntroScreen implements Screen {
             e.printStackTrace();
             scheduleNextScreen();
         }
+
+        Music music = null;
+        String musicPath = "assets/sounds/soud/storytelling.mp3";
+        if (Gdx.files.internal(musicPath).exists()) {
+            try {
+                music = Gdx.audio.newMusic(Gdx.files.internal(musicPath));
+                music.setLooping(true);
+                music.setVolume(0.5f);
+            } catch (Exception e) {
+                Gdx.app.error("IntroScreen", "Failed to load music: " + musicPath, e);
+            }
+        } else {
+            Gdx.app.error("IntroScreen", "Missing music: " + musicPath);
+        }
+        backgroundMusic = music;
     }
 
 
@@ -286,6 +303,10 @@ public class IntroScreen implements Screen {
         
         // Initialize skip button now that viewport is properly set up
         setupSkipButton();
+
+        if (backgroundMusic != null && !backgroundMusic.isPlaying()) {
+            backgroundMusic.play();
+        }
     }
 
     @Override
@@ -544,7 +565,11 @@ public class IntroScreen implements Screen {
         if (!transitionScheduled) {
             transitionScheduled = true;
             isFadingIn = false;
-            
+
+            if (backgroundMusic != null && backgroundMusic.isPlaying()) {
+                backgroundMusic.stop();
+            }
+
             // Schedule the screen transition on the next frame
             Gdx.app.postRunnable(new Runnable() {
                 @Override
@@ -566,7 +591,11 @@ public class IntroScreen implements Screen {
     @Override public void pause() {}
     @Override public void resume() {}
 
-    @Override public void hide() {}
+    @Override public void hide() {
+        if (backgroundMusic != null && backgroundMusic.isPlaying()) {
+            backgroundMusic.stop();
+        }
+    }
 
     private Pixmap createColoredPixmap(Color color) {
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
@@ -590,5 +619,8 @@ public class IntroScreen implements Screen {
         if (textBoxViolet != null) textBoxViolet.dispose();
         if (textBoxBlue != null) textBoxBlue.dispose();
         storyImages.clear();
+        if (backgroundMusic != null) {
+            backgroundMusic.dispose();
+        }
     }
 }
