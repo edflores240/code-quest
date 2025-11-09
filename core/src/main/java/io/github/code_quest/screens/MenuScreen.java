@@ -69,11 +69,12 @@ public class MenuScreen implements Screen {
     private static final int OPTION_START = 0;
     private static final int OPTION_LOAD = 1;
     private static final float ARROW_SIZE = 44f;
-    private static final float ARROW_NEAR_PAD = 1f;
-    private static final float ARROW_FAR_PAD = 4f;
+    private static final float ARROW_NEAR_PAD = -10f;
+    private static final float ARROW_FAR_PAD = 6f;
     private static final float ARROW_VERTICAL_PAD = 1f;
-    private static final float ARROW_ANIM_DURATION = 0.45f;
-    private static final float ARROW_ANIM_DELAY = 0.2f;
+    private static final float ARROW_ANIM_DURATION = 0.7f;
+    private static final float ARROW_ANIM_DELAY = 0.18f;
+    private static final float ARROW_PULSE_SCALE = 0.06f;
 
     public MenuScreen(Main game) {
         this.game = game;
@@ -218,7 +219,7 @@ public class MenuScreen implements Screen {
         if (loadButtonTexture != null) {
             loadButtonImage = new Image(loadButtonTexture);
             loadButtonImage.setScaling(Scaling.stretch);
-            loadButtonImage.setSize(140f, 56f);
+            loadButtonImage.setSize(168f, 64f);
             loadButtonImage.addListener(new ClickListener() {
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
@@ -227,8 +228,8 @@ public class MenuScreen implements Screen {
                 }
             });
             loadActor = loadButtonImage;
-            loadWidth = 140f;
-            loadHeight = 56f;
+            loadWidth = 168f;
+            loadHeight = 64f;
         } else {
             loadButtonTextButton = new TextButton("LOAD SAVE", skin);
             loadButtonTextButton.addListener(new ChangeListener() {
@@ -239,8 +240,8 @@ public class MenuScreen implements Screen {
                 }
             });
             loadActor = loadButtonTextButton;
-            loadWidth = 150f;
-            loadHeight = 48f;
+            loadWidth = 170f;
+            loadHeight = 56f;
         }
         loadOptionActor = loadActor;
         loadLeftArrow = createArrowImage(arrowRightTexture);
@@ -477,21 +478,23 @@ public class MenuScreen implements Screen {
         arrow.setScale(1f);
         float width = arrow.getWidth() > 0f ? arrow.getWidth() : arrow.getPrefWidth();
         float height = arrow.getHeight() > 0f ? arrow.getHeight() : arrow.getPrefHeight();
-        float originX = leftSide ? width : 0f;
+        float originX = width * 0.5f;
         float originY = height * 0.5f;
         arrow.setOrigin(originX, originY);
         arrow.setScale(1f);
 
         if (selected) {
             arrow.setVisible(true);
+            float pulseUp = 1f + ARROW_PULSE_SCALE;
             arrow.addAction(Actions.sequence(
                     Actions.delay(ARROW_ANIM_DELAY),
                     Actions.forever(Actions.sequence(
                             Actions.parallel(
-                                    Actions.scaleTo(1.1f, 1.08f, ARROW_ANIM_DURATION)
-                            ),
+                                    Actions.scaleTo(pulseUp, pulseUp, ARROW_ANIM_DURATION)
+                            )
+                            ,
                             Actions.parallel(
-                                    Actions.scaleTo(0.94f, 0.96f, ARROW_ANIM_DURATION)
+                                    Actions.scaleTo(1f, 1f, ARROW_ANIM_DURATION)
                             )
                     ))
             ));

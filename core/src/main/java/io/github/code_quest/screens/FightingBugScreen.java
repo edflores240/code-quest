@@ -36,6 +36,7 @@ public class FightingBugScreen implements Screen {
     private static final float POST_BATTLE_DELAY = 2.5f;
     private static final float ENEMY_LOOP_PAUSE = 0.6f;
     private static final float HERO_ATTACK_DISPLAY = 0.55f;
+    private static final float HERO_HURT_DISPLAY = 0.55f;
 
     private final Main game;
     private final String characterKey;
@@ -64,7 +65,9 @@ public class FightingBugScreen implements Screen {
     private float enemyAnimTime;
     private TextureRegion heroIdleFrame;
     private TextureRegion heroAttackFrame;
+    private TextureRegion heroHurtFrame;
     private float heroAttackTimer;
+    private float heroHurtTimer;
     private boolean heroIntroFinished;
     private TextureRegion enemyIdleFrame;
 
@@ -129,6 +132,7 @@ public class FightingBugScreen implements Screen {
         this.keyTimer = 0f;
         this.messageTimer = 0f;
         this.postBattleTimer = -1f;
+        this.heroHurtTimer = 0f;
     }
 
     private void configureFonts() {
@@ -152,6 +156,7 @@ public class FightingBugScreen implements Screen {
         heroIntroAnimation = null;
         heroIdleFrame = null;
         heroAttackFrame = null;
+        heroHurtFrame = null;
         Array<TextureRegion> heroFrames = loadFrameRegions(visuals.heroFramePaths);
         if (!heroFrames.isEmpty()) {
             heroAttackFrame = heroFrames.peek();
@@ -162,6 +167,8 @@ public class FightingBugScreen implements Screen {
                 heroIntroAnimation = buildAnimationFromRegions(introFrames, visuals.heroFrameDuration, Animation.PlayMode.NORMAL);
             }
         }
+
+        heroHurtFrame = loadFrameRegion("assets/images/fightingscreen/fightingframe/wronganswer.png");
 
         enemyIdleFrame = null;
         enemyAnimation = buildAnimation(visuals.enemyFramePaths, visuals.enemyFrameDuration);
@@ -248,6 +255,7 @@ public class FightingBugScreen implements Screen {
         lastResult = null;
         postBattleTimer = -1f;
         heroAttackTimer = 0f;
+        heroHurtTimer = 0f;
         heroIntroFinished = heroIntroAnimation == null;
     }
 
@@ -296,6 +304,10 @@ public class FightingBugScreen implements Screen {
         if (heroAttackTimer > 0f) {
             heroAttackTimer = Math.max(0f, heroAttackTimer - delta);
         }
+
+        if (heroHurtTimer > 0f) {
+            heroHurtTimer = Math.max(0f, heroHurtTimer - delta);
+        }
     }
 
     private void handleInput() {
@@ -340,12 +352,18 @@ public class FightingBugScreen implements Screen {
         messageTimer = MESSAGE_DURATION;
         keyTimer = KEY_COOLDOWN;
 
-        if (lastResult.isCorrect() && correctSound != null) {
-            correctSound.play(0.9f);
+        if (lastResult.isCorrect()) {
+            if (correctSound != null) {
+                correctSound.play(0.9f);
+            }
             heroAttackTimer = HERO_ATTACK_DISPLAY;
-        } else if (!lastResult.isCorrect() && incorrectSound != null) {
-            incorrectSound.play(0.85f);
+            heroHurtTimer = 0f;
+        } else {
+            if (incorrectSound != null) {
+                incorrectSound.play(0.85f);
+            }
             heroAttackTimer = 0f;
+            heroHurtTimer = HERO_HURT_DISPLAY;
         }
 
         if (mechanics.isBattleFinished()) {
@@ -403,6 +421,8 @@ public class FightingBugScreen implements Screen {
         TextureRegion heroFrame;
         if (heroAttackTimer > 0f && heroAttackFrame != null) {
             heroFrame = heroAttackFrame;
+        } else if (heroHurtTimer > 0f && heroHurtFrame != null) {
+            heroFrame = heroHurtFrame;
         } else if (!heroIntroFinished && heroIntroAnimation != null) {
             heroFrame = heroIntroAnimation.getKeyFrame(heroAnimTime);
             if (heroIntroAnimation.isAnimationFinished(heroAnimTime) && heroIdleFrame != null) {
