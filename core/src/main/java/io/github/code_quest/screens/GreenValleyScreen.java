@@ -11,11 +11,14 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import io.github.code_quest.Main;
+import io.github.code_quest.save.SaveData;
+import io.github.code_quest.save.SaveManager;
 
 public class GreenValleyScreen implements Screen {
     private static final String MALE_SPRITE_BASE = "assets/images/walkingcharactermale/";
@@ -24,10 +27,17 @@ public class GreenValleyScreen implements Screen {
     private static float MALE_REFERENCE_HEIGHT = -1f;
     private static float MALE_REFERENCE_WIDTH = -1f;
 
-    private static final float VIEWPORT_WIDTH = 1280f;
-    private static final float VIEWPORT_HEIGHT = 720f;
+    private static final float VIEWPORT_WIDTH = 1100f;
+    private static final float VIEWPORT_HEIGHT = 640f;
     private static final float MOVE_SPEED = 150f;
-    private static final float SPRITE_SCALE = 0.16f;
+    private static final float SPRITE_SCALE = 0.13f;
+
+    private static final String BOTBUG_BASE_PATH = "assets/images/bugbotwalking/";
+    private static final String BOTBUG_ENCOUNTER_ID = "botbug_green_valley";
+    private static final float BOTBUG_HEIGHT_RATIO = 0.5f;
+    private static final float BOTBUG_SPEED = 45f;
+    private static final float BOTBUG_PAUSE_DURATION = 1.2f;
+    private static final float COLLISION_PADDING_RATIO = 0.25f;
 
     private final Main game;
     private final String characterKey;
@@ -61,11 +71,63 @@ public class GreenValleyScreen implements Screen {
     private Direction currentDirection;
     private boolean positionInitialized;
 
+    private Animation<TextureRegion> botBugWalkFrontAnimation;
+    private Animation<TextureRegion> botBugWalkBackAnimation;
+    private Animation<TextureRegion> botBugWalkLeftAnimation;
+    private Animation<TextureRegion> botBugWalkRightAnimation;
+
+    private TextureRegion botBugFacingFront;
+    private TextureRegion botBugFacingBack;
+    private TextureRegion botBugFacingLeft;
+    private TextureRegion botBugFacingRight;
+
+    private final Vector2 botBugPosition;
+    private final Rectangle botBugBounds;
+    private final Rectangle playerBounds;
+    private Vector2[] botBugWaypoints;
+    private int botBugTargetIndex;
+    private int botBugNextTargetIndex;
+    private float botBugPauseTimer;
+    private float botBugStateTime;
+    private Direction botBugDirection;
+    private float botBugRenderWidth;
+    private float botBugRenderHeight;
+    private float botBugBaseFrameWidth;
+    private float botBugBaseFrameHeight;
+    private boolean botBugPositionInitialized;
+    private boolean botBugPathInitialized;
+    private boolean botBugMoving;
+    private boolean triggeredFightingScreen;
+
+    private int currentLevel;
+    private int coins;
+    private Array<String> inventory;
+    private boolean saveLoaded;
+    private float autoSaveTimer;
+
     private enum Direction {
         FRONT,
         BACK,
         LEFT,
         RIGHT
+    }
+
+    private void saveGame() {
+        SaveData data = new SaveData(position.x, position.y, currentLevel, coins, inventory, characterKey);
+        SaveManager.save(data);
+    }
+
+    private void loadGame() {
+        SaveData data = SaveManager.load();
+        if (data == null) {
+            return;
+        }
+        position.set(data.getPositionX(), data.getPositionY());
+        positionInitialized = true;
+        currentLevel = data.getCurrentLevel();
+        coins = data.getCoins();
+        inventory = data.getInventory() != null ? new Array<>(data.getInventory()) : new Array<>();
+        autoSaveTimer = 0f;
     }
 
     public GreenValleyScreen(Main game) {
@@ -82,12 +144,30 @@ public class GreenValleyScreen implements Screen {
         this.batch = new SpriteBatch();
         this.loadedTextures = new Array<>();
         this.position = new Vector2();
+        this.playerBounds = new Rectangle();
 
         this.stateTime = 0f;
         this.currentDirection = Direction.FRONT;
         this.positionInitialized = false;
 
-        this.background = loadTexture("assets/images/greenvalley.png");
+        this.botBugPosition = new Vector2();
+        this.botBugBounds = new Rectangle();
+        this.botBugWaypoints = createDefaultBotBugPath();
+        this.botBugTargetIndex = 0;
+        this.botBugNextTargetIndex = 1;
+        this.botBugPauseTimer = 0f;
+        this.botBugStateTime = 0f;
+        this.botBugDirection = Direction.FRONT;
+        this.botBugRenderWidth = 0f;
+        this.botBugRenderHeight = 0f;
+        this.botBugBaseFrameWidth = 0f;
+        this.botBugBaseFrameHeight = 0f;
+        this.triggeredFightingScreen = false;
+        this.botBugPositionInitialized = false;
+        this.botBugPathInitialized = false;
+        this.botBugMoving = false;
+
+        this.background = loadTexture("assets/images/corruptedgreenvalley.png");
         if (background != null) {
             mapWidth = background.getWidth();
             mapHeight = background.getHeight();
@@ -96,6 +176,13 @@ public class GreenValleyScreen implements Screen {
             mapHeight = VIEWPORT_HEIGHT;
         }
         loadAnimations();
+        loadBotBugAssets();
+
+        this.currentLevel = 1;
+        this.coins = 0;
+        this.inventory = new Array<>();
+        this.saveLoaded = false;
+        this.autoSaveTimer = 0f;
 
         Music music = null;
         String musicPath = "assets/sounds/firsbiome.mp3";
@@ -177,6 +264,251 @@ public class GreenValleyScreen implements Screen {
         }
     }
 
+    private void loadBotBugAssets() {
+        botBugFacingFront = loadTextureRegion(BOTBUG_BASE_PATH + "bugfacingfront.png");
+        botBugFacingBack = loadTextureRegion(BOTBUG_BASE_PATH + "bugfacingback.png");
+
+        botBugWalkFrontAnimation = buildAnimation(
+                BOTBUG_BASE_PATH + "1bugwalkingfront.png",
+                BOTBUG_BASE_PATH + "2bugwalkingfront.png"
+        );
+        botBugWalkBackAnimation = buildAnimation(
+                BOTBUG_BASE_PATH + "1bugwalkingback.png",
+                BOTBUG_BASE_PATH + "2bugwalkingback.png"
+        );
+        botBugWalkLeftAnimation = buildAnimation(
+                BOTBUG_BASE_PATH + "1bugwalkingleft.png",
+                BOTBUG_BASE_PATH + "2bugwalkingleft.png"
+        );
+        botBugWalkRightAnimation = buildAnimation(
+                BOTBUG_BASE_PATH + "1bugwalkingright.png",
+                BOTBUG_BASE_PATH + "2bugwalkingright.png"
+        );
+
+        if (botBugFacingFront == null && botBugWalkFrontAnimation != null) {
+            botBugFacingFront = botBugWalkFrontAnimation.getKeyFrame(0f);
+        }
+        if (botBugFacingBack == null && botBugWalkBackAnimation != null) {
+            botBugFacingBack = botBugWalkBackAnimation.getKeyFrame(0f);
+        }
+        if (botBugFacingLeft == null && botBugWalkLeftAnimation != null) {
+            botBugFacingLeft = botBugWalkLeftAnimation.getKeyFrame(0f);
+        }
+        if (botBugFacingRight == null && botBugWalkRightAnimation != null) {
+            botBugFacingRight = botBugWalkRightAnimation.getKeyFrame(0f);
+        }
+
+        TextureRegion baselineRegion = botBugFacingFront != null
+                ? botBugFacingFront
+                : (botBugWalkFrontAnimation != null ? botBugWalkFrontAnimation.getKeyFrame(0f) : null);
+
+        if (baselineRegion != null) {
+            botBugBaseFrameWidth = baselineRegion.getRegionWidth();
+            botBugBaseFrameHeight = baselineRegion.getRegionHeight();
+        }
+    }
+
+    private Vector2[] createDefaultBotBugPath() {
+        Vector2[] path = new Vector2[4];
+        for (int i = 0; i < path.length; i++) {
+            path[i] = new Vector2();
+        }
+        return path;
+    }
+
+    private boolean updateBotBug(float delta, float playerWidth, float playerHeight) {
+        if (triggeredFightingScreen) {
+            return true;
+        }
+
+        if (botBugBaseFrameWidth <= 0f || botBugBaseFrameHeight <= 0f) {
+            return false;
+        }
+
+        float baselineHeightPx = resolveBaselineHeight();
+        float targetHeightPx = baselineHeightPx > 0f
+                ? baselineHeightPx * BOTBUG_HEIGHT_RATIO
+                : botBugBaseFrameHeight;
+
+        float frameHeight = Math.max(1f, botBugBaseFrameHeight);
+        float frameWidth = Math.max(1f, botBugBaseFrameWidth);
+        float heightScale = targetHeightPx / frameHeight;
+        botBugRenderHeight = targetHeightPx * SPRITE_SCALE;
+        botBugRenderWidth = frameWidth * heightScale * SPRITE_SCALE;
+
+        if (!botBugPositionInitialized && botBugRenderWidth > 0f && botBugRenderHeight > 0f) {
+            float maxX = Math.max(0f, mapWidth - botBugRenderWidth);
+            float maxY = Math.max(0f, mapHeight - botBugRenderHeight);
+            float startX = MathUtils.clamp(mapWidth * 0.62f, 0f, maxX);
+            float startY = MathUtils.clamp(mapHeight * 0.48f, 0f, maxY);
+            botBugPosition.set(startX, startY);
+            botBugPositionInitialized = true;
+        }
+
+        if (!botBugPathInitialized && botBugPositionInitialized) {
+            initializeBotBugPath(botBugRenderWidth, botBugRenderHeight);
+        }
+
+        if (botBugWaypoints == null || botBugWaypoints.length < 2) {
+            return false;
+        }
+
+        if (botBugPauseTimer > 0f) {
+            botBugPauseTimer -= delta;
+            if (botBugPauseTimer <= 0f) {
+                botBugPauseTimer = 0f;
+            }
+            botBugMoving = false;
+        } else {
+            Vector2 target = botBugWaypoints[botBugTargetIndex];
+            Vector2 temp = new Vector2(target).sub(botBugPosition);
+            float distance = temp.len();
+
+            if (distance <= 1.5f) {
+                botBugPosition.set(target);
+                botBugMoving = false;
+                botBugPauseTimer = BOTBUG_PAUSE_DURATION;
+                advanceBotBugTarget();
+            } else {
+                float moveAmount = BOTBUG_SPEED * delta;
+                if (moveAmount >= distance) {
+                    botBugPosition.set(target);
+                    botBugMoving = false;
+                    botBugPauseTimer = BOTBUG_PAUSE_DURATION;
+                    advanceBotBugTarget();
+                } else {
+                    float moveX = temp.x;
+                    float moveY = temp.y;
+                    temp.nor().scl(moveAmount);
+                    botBugPosition.add(temp);
+                    botBugMoving = true;
+
+                    if (Math.abs(moveX) > Math.abs(moveY)) {
+                        botBugDirection = moveX > 0f ? Direction.RIGHT : Direction.LEFT;
+                    } else {
+                        botBugDirection = moveY > 0f ? Direction.BACK : Direction.FRONT;
+                    }
+                }
+            }
+        }
+
+        if (botBugMoving) {
+            botBugStateTime += delta;
+        } else {
+            botBugStateTime = 0f;
+        }
+
+        float playerPaddingX = playerWidth * COLLISION_PADDING_RATIO;
+        float playerPaddingY = playerHeight * COLLISION_PADDING_RATIO;
+        float botPaddingX = botBugRenderWidth * COLLISION_PADDING_RATIO;
+        float botPaddingY = botBugRenderHeight * COLLISION_PADDING_RATIO;
+
+        float playerCollisionWidth = Math.max(0f, playerWidth - playerPaddingX);
+        float playerCollisionHeight = Math.max(0f, playerHeight - playerPaddingY);
+        float botCollisionWidth = Math.max(0f, botBugRenderWidth - botPaddingX);
+        float botCollisionHeight = Math.max(0f, botBugRenderHeight - botPaddingY);
+
+        playerBounds.set(
+                position.x + (playerWidth - playerCollisionWidth) / 2f,
+                position.y + (playerHeight - playerCollisionHeight) / 2f,
+                playerCollisionWidth,
+                playerCollisionHeight
+        );
+
+        botBugBounds.set(
+                botBugPosition.x + (botBugRenderWidth - botCollisionWidth) / 2f,
+                botBugPosition.y + (botBugRenderHeight - botCollisionHeight) / 2f,
+                botCollisionWidth,
+                botCollisionHeight
+        );
+
+        if (!triggeredFightingScreen && playerBounds.overlaps(botBugBounds)) {
+            triggeredFightingScreen = true;
+            if (backgroundMusic != null && backgroundMusic.isPlaying()) {
+                backgroundMusic.stop();
+            }
+            Gdx.app.postRunnable(() -> game.setScreen(new FightingBugScreen(game, characterKey, BOTBUG_ENCOUNTER_ID)));
+            return true;
+        }
+
+        return false;
+    }
+
+    private void advanceBotBugTarget() {
+        botBugTargetIndex = botBugNextTargetIndex;
+        botBugNextTargetIndex = (botBugNextTargetIndex + 1) % botBugWaypoints.length;
+    }
+
+    private void initializeBotBugPath(float npcWidth, float npcHeight) {
+        if (botBugWaypoints == null || botBugWaypoints.length < 4) {
+            botBugWaypoints = createDefaultBotBugPath();
+        }
+
+        float maxX = Math.max(0f, mapWidth - npcWidth);
+        float maxY = Math.max(0f, mapHeight - npcHeight);
+        float baseX = MathUtils.clamp(botBugPosition.x, 0f, maxX);
+        float baseY = MathUtils.clamp(botBugPosition.y, 0f, maxY);
+
+        float stepX = Math.min(220f, Math.max(80f, mapWidth * 0.18f));
+        float stepY = Math.min(180f, Math.max(70f, mapHeight * 0.16f));
+
+        float x1 = baseX;
+        float y1 = baseY;
+        float x2 = MathUtils.clamp(baseX + stepX, 0f, maxX);
+        float y2 = y1;
+        float x3 = x2;
+        float y3 = MathUtils.clamp(baseY - stepY, 0f, maxY);
+        float x4 = x1;
+        float y4 = y3;
+
+        botBugWaypoints[0].set(x1, y1);
+        botBugWaypoints[1].set(x2, y2);
+        botBugWaypoints[2].set(x3, y3);
+        botBugWaypoints[3].set(x4, y4);
+
+        botBugPosition.set(botBugWaypoints[0]);
+        botBugTargetIndex = 1;
+        botBugNextTargetIndex = 2;
+        botBugPathInitialized = true;
+    }
+
+    private TextureRegion getBotBugFrame() {
+        switch (botBugDirection) {
+            case BACK:
+                if (botBugMoving && botBugWalkBackAnimation != null) {
+                    return botBugWalkBackAnimation.getKeyFrame(botBugStateTime, true);
+                }
+                return botBugFacingBack != null ? botBugFacingBack : botBugFacingFront;
+            case LEFT:
+                if (botBugMoving && botBugWalkLeftAnimation != null) {
+                    return botBugWalkLeftAnimation.getKeyFrame(botBugStateTime, true);
+                }
+                return botBugFacingLeft != null ? botBugFacingLeft : botBugFacingFront;
+            case RIGHT:
+                if (botBugMoving && botBugWalkRightAnimation != null) {
+                    return botBugWalkRightAnimation.getKeyFrame(botBugStateTime, true);
+                }
+                return botBugFacingRight != null ? botBugFacingRight : botBugFacingFront;
+            case FRONT:
+            default:
+                if (botBugMoving && botBugWalkFrontAnimation != null) {
+                    return botBugWalkFrontAnimation.getKeyFrame(botBugStateTime, true);
+                }
+                return botBugFacingFront;
+        }
+    }
+
+    private void drawBotBug() {
+        if (botBugRenderWidth <= 0f || botBugRenderHeight <= 0f) {
+            return;
+        }
+
+        TextureRegion frame = getBotBugFrame();
+        if (frame != null) {
+            batch.draw(frame, botBugPosition.x, botBugPosition.y, botBugRenderWidth, botBugRenderHeight);
+        }
+    }
+
     private TextureRegion loadTextureRegion(String path) {
         if (!Gdx.files.internal(path).exists()) {
             Gdx.app.error("GreenValleyScreen", "Missing texture: " + path);
@@ -216,6 +548,10 @@ public class GreenValleyScreen implements Screen {
         if (backgroundMusic != null && !backgroundMusic.isPlaying()) {
             backgroundMusic.play();
         }
+        if (!saveLoaded) {
+            loadGame();
+            saveLoaded = true;
+        }
     }
 
     @Override
@@ -225,6 +561,12 @@ public class GreenValleyScreen implements Screen {
             stateTime += delta;
         } else {
             stateTime = 0f;
+        }
+
+        autoSaveTimer += delta;
+        if (autoSaveTimer >= 5f) {
+            saveGame();
+            autoSaveTimer = 0f;
         }
 
         Gdx.gl.glClearColor(0.05f, 0.2f, 0.05f, 1f);
@@ -267,6 +609,10 @@ public class GreenValleyScreen implements Screen {
             position.y = MathUtils.clamp(position.y, 0f, maxY);
         }
 
+        if (updateBotBug(delta, width, height)) {
+            return;
+        }
+
         updateCamera(width, height);
         batch.setProjectionMatrix(camera.combined);
 
@@ -274,6 +620,7 @@ public class GreenValleyScreen implements Screen {
         if (background != null) {
             batch.draw(background, 0f, 0f, mapWidth, mapHeight);
         }
+        drawBotBug();
         if (frame != null) {
             batch.draw(frame, position.x, position.y, width, height);
         }
@@ -310,6 +657,13 @@ public class GreenValleyScreen implements Screen {
         float dx = 0f;
         float dy = 0f;
         Direction newDirection = currentDirection;
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F5)) {
+            saveGame();
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F9)) {
+            loadGame();
+        }
 
         if (Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.A)) {
             dx -= 1f;
@@ -452,10 +806,12 @@ public class GreenValleyScreen implements Screen {
         if (backgroundMusic != null && backgroundMusic.isPlaying()) {
             backgroundMusic.stop();
         }
+        saveGame();
     }
 
     @Override
     public void dispose() {
+        saveGame();
         if (backgroundMusic != null) {
             backgroundMusic.dispose();
         }

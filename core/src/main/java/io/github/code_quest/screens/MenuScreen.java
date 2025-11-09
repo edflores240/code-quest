@@ -18,17 +18,19 @@ import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.Label.LabelStyle;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.code_quest.Main;
 import io.github.code_quest.entities.ModernGlitchParticles;
-// Removed particle imports for cleaner design
+import io.github.code_quest.save.SaveManager;
 
 public class MenuScreen implements Screen {
     private final Main game;
@@ -40,10 +42,18 @@ public class MenuScreen implements Screen {
     private Texture titleNormal;       // assets/images/menu-title.png
     private Texture titleGlitch;      // assets/images/menu-title-glitch.png
     private Texture startButton;      // assets/images/start-button.png
+    private Texture loadButtonTexture; // assets/images/LOADBUTTON.png
+    private Texture arrowLeftTexture;   // assets/images/arrowpointingleftonbutton.png
+    private Texture arrowRightTexture;  // assets/images/arrowpointingrightonbutton.png
 
     private Image backgroundImage;
     private Image titleImage;
     private Image startButtonImage;
+    private Image loadButtonImage;
+    private Image startLeftArrow;
+    private Image startRightArrow;
+    private Image loadLeftArrow;
+    private Image loadRightArrow;
 
     private Table root;
     private TextButton startBtn;
@@ -51,7 +61,19 @@ public class MenuScreen implements Screen {
     private Music backgroundMusic;
     private Sound confirmSound;
     private boolean startTriggered;
+    private TextButton loadButtonTextButton;
+    private Actor startOptionActor;
+    private Actor loadOptionActor;
+    private int selectedOption;
 
+    private static final int OPTION_START = 0;
+    private static final int OPTION_LOAD = 1;
+    private static final float ARROW_SIZE = 44f;
+    private static final float ARROW_NEAR_PAD = 1f;
+    private static final float ARROW_FAR_PAD = 4f;
+    private static final float ARROW_VERTICAL_PAD = 1f;
+    private static final float ARROW_ANIM_DURATION = 0.45f;
+    private static final float ARROW_ANIM_DELAY = 0.2f;
 
     public MenuScreen(Main game) {
         this.game = game;
@@ -77,6 +99,9 @@ public class MenuScreen implements Screen {
         titleNormal = loadIfExists("images/menu-title.png");
         titleGlitch = loadIfExists("images/menu-title-glitch.png");
         startButton = loadIfExists("images/start-button.png");
+        loadButtonTexture = loadIfExists("images/LOADBUTTON.png");
+        arrowLeftTexture = loadIfExists("images/arrowpointingleftonbutton.png");
+        arrowRightTexture = loadIfExists("images/arrowpointingrightonbutton.png");
     }
 
     private void loadMusic() {
@@ -127,7 +152,7 @@ public class MenuScreen implements Screen {
         backgroundImage.setFillParent(true);
         stage.addActor(backgroundImage);
 
-       // Modern glitch particles for background
+        // Modern glitch particles for background
         glitchParticles = new ModernGlitchParticles(800, 480, 40, new Color(0.8f, 1f, 0.8f, 0.3f));
         stage.addActor(glitchParticles);
 
@@ -151,30 +176,87 @@ public class MenuScreen implements Screen {
 
         } else {
             // Add the fallback title label directly - smaller size
-            Label.LabelStyle titleStyle = new Label.LabelStyle(skin.getFont("default-font"), Color.valueOf("9EE493"));
+            LabelStyle titleStyle = new Label.LabelStyle(skin.getFont("default-font"), Color.valueOf("9EE493"));
             Label titleLabel = new Label("CodeQuest", titleStyle);
             titleLabel.setFontScale(2.0f);
             titleLabel.setAlignment(Align.center);
             root.add(titleLabel).padBottom(40).row();
 
         }
-        if (startButton != null) {
-            root.add(startButtonImage).size(200, 80).padBottom(20).row();
+        Actor startActor;
+        float startWidth;
+        float startHeight;
+        if (startButton != null && startButtonImage != null) {
+            startActor = startButtonImage;
+            startWidth = 200f;
+            startHeight = 80f;
         } else {
-            // Add the fallback button directly - smaller size
             startBtn = new TextButton("START", skin);
             startBtn.setColor(Color.valueOf("9EE493"));
             startBtn.addListener(new ChangeListener() {
                 @Override public void changed(ChangeEvent event, Actor actor) {
+                    setSelectedOption(OPTION_START);
                     onStart();
                 }
             });
-            root.add(startBtn).size(150, 50).padBottom(20).row();
+            startActor = startBtn;
+            startWidth = 150f;
+            startHeight = 50f;
         }
+        startOptionActor = startActor;
+        startLeftArrow = createArrowImage(arrowRightTexture);
+        startRightArrow = createArrowImage(arrowLeftTexture);
+        Table startRow = new Table();
+        addArrowCell(startRow, startLeftArrow, true);
+        startRow.add(startActor).size(startWidth, startHeight);
+        addArrowCell(startRow, startRightArrow, false);
+        root.add(startRow).padBottom(6f).row();
+
+        Actor loadActor;
+        float loadWidth;
+        float loadHeight;
+        if (loadButtonTexture != null) {
+            loadButtonImage = new Image(loadButtonTexture);
+            loadButtonImage.setScaling(Scaling.stretch);
+            loadButtonImage.setSize(140f, 56f);
+            loadButtonImage.addListener(new ClickListener() {
+                @Override
+                public void clicked(InputEvent event, float x, float y) {
+                    setSelectedOption(OPTION_LOAD);
+                    onLoadSave();
+                }
+            });
+            loadActor = loadButtonImage;
+            loadWidth = 140f;
+            loadHeight = 56f;
+        } else {
+            loadButtonTextButton = new TextButton("LOAD SAVE", skin);
+            loadButtonTextButton.addListener(new ChangeListener() {
+                @Override
+                public void changed(ChangeEvent event, Actor actor) {
+                    setSelectedOption(OPTION_LOAD);
+                    onLoadSave();
+                }
+            });
+            loadActor = loadButtonTextButton;
+            loadWidth = 150f;
+            loadHeight = 48f;
+        }
+        loadOptionActor = loadActor;
+        loadLeftArrow = createArrowImage(arrowRightTexture);
+        loadRightArrow = createArrowImage(arrowLeftTexture);
+        Table loadRow = new Table();
+        addArrowCell(loadRow, loadLeftArrow, true);
+        loadRow.add(loadActor).size(loadWidth, loadHeight);
+        addArrowCell(loadRow, loadRightArrow, false);
+        root.add(loadRow).padBottom(4f).row();
         root.add().expandY();
 
         // Input processor
         Gdx.input.setInputProcessor(stage);
+
+        updateLoadButtonState(hasAvailableSaves());
+        setSelectedOption(OPTION_START);
     }
 
     private void createGlitchyTitle() {
@@ -227,17 +309,11 @@ public class MenuScreen implements Screen {
             startButtonImage = new Image(startButton);
             startButtonImage.setScaling(Scaling.fit);
 
-            // Simple pulsing animation
-            startButtonImage.addAction(Actions.forever(Actions.sequence(
-                Actions.scaleTo(1.0f, 1.0f, 1.0f),
-                Actions.scaleTo(1.02f, 1.02f, 1.0f),
-                Actions.scaleTo(1.0f, 1.0f, 1.0f)
-            )));
-
             // Make it clickable
             startButtonImage.addListener(new ClickListener() {
-            @Override
+                @Override
                 public void clicked(InputEvent event, float x, float y) {
+                    setSelectedOption(OPTION_START);
                     onStart();
                 }
             });
@@ -256,7 +332,20 @@ public class MenuScreen implements Screen {
                     return true;
                 }
                 if (keycode == Input.Keys.ENTER || keycode == Input.Keys.SPACE) {
-                    onStart();
+                    triggerSelectedOption();
+                    return true;
+                }
+                if (keycode == Input.Keys.UP || keycode == Input.Keys.W || keycode == Input.Keys.LEFT) {
+                    changeSelection(-1);
+                    return true;
+                }
+                if (keycode == Input.Keys.DOWN || keycode == Input.Keys.S || keycode == Input.Keys.RIGHT) {
+                    changeSelection(1);
+                    return true;
+                }
+                if (keycode == Input.Keys.L) {
+                    setSelectedOption(OPTION_LOAD);
+                    triggerSelectedOption();
                     return true;
                 }
                 return false;
@@ -269,6 +358,7 @@ public class MenuScreen implements Screen {
             return;
         }
         startTriggered = true;
+        SaveManager.createNewSlot();
         if (confirmSound != null) {
             confirmSound.play(0.7f);
         }
@@ -276,6 +366,20 @@ public class MenuScreen implements Screen {
         stage.addAction(Actions.sequence(
             Actions.fadeOut(0.5f),
             Actions.run(() -> game.setScreen(new IntroScreen(game)))
+        ));
+    }
+
+    private void onLoadSave() {
+        if (!hasAvailableSaves()) {
+            updateLoadButtonState(false);
+            return;
+        }
+        if (confirmSound != null) {
+            confirmSound.play(0.7f);
+        }
+        stage.addAction(Actions.sequence(
+                Actions.fadeOut(0.3f),
+                Actions.run(() -> game.setScreen(new LoadSaveScreen(game)))
         ));
     }
 
@@ -293,6 +397,145 @@ public class MenuScreen implements Screen {
         if (backgroundMusic != null && !backgroundMusic.isPlaying()) {
             backgroundMusic.play();
         }
+
+        updateLoadButtonState(hasAvailableSaves());
+    }
+
+    private boolean hasAvailableSaves() {
+        return SaveManager.exists() || SaveManager.listSaves().length > 0;
+    }
+
+    private void updateLoadButtonState(boolean enabled) {
+        if (loadButtonTextButton != null) {
+            loadButtonTextButton.setDisabled(!enabled);
+            loadButtonTextButton.setVisible(true);
+        }
+        if (loadButtonImage != null) {
+            loadButtonImage.setTouchable(enabled ? Touchable.enabled : Touchable.disabled);
+            loadButtonImage.getColor().a = enabled ? 1f : 0.4f;
+        }
+        if (!enabled && selectedOption == OPTION_LOAD) {
+            setSelectedOption(OPTION_START);
+        } else {
+            updateSelectedVisuals();
+        }
+    }
+
+    private void changeSelection(int delta) {
+        if (delta == 0) {
+            return;
+        }
+        int option = selectedOption;
+        if (delta > 0) {
+            option = selectedOption == OPTION_START && hasAvailableSaves() ? OPTION_LOAD : OPTION_START;
+        } else {
+            option = selectedOption == OPTION_LOAD ? OPTION_START : (hasAvailableSaves() ? OPTION_LOAD : OPTION_START);
+        }
+        setSelectedOption(option);
+    }
+
+    private void triggerSelectedOption() {
+        if (selectedOption == OPTION_LOAD) {
+            onLoadSave();
+        } else {
+            onStart();
+        }
+    }
+
+    private void setSelectedOption(int option) {
+        if (option == OPTION_LOAD && !hasAvailableSaves()) {
+            option = OPTION_START;
+        }
+        if (selectedOption == option) {
+            updateSelectedVisuals();
+            return;
+        }
+        selectedOption = option;
+        updateSelectedVisuals();
+    }
+
+    private void updateSelectedVisuals() {
+        boolean startSelected = selectedOption == OPTION_START;
+        boolean loadSelected = selectedOption == OPTION_LOAD && hasAvailableSaves();
+
+        updateArrowAnimation(startLeftArrow, startSelected, true);
+        updateArrowAnimation(startRightArrow, startSelected, false);
+        updateArrowAnimation(loadLeftArrow, loadSelected, true);
+        updateArrowAnimation(loadRightArrow, loadSelected, false);
+
+        applySelectionStyle(startOptionActor, startSelected);
+        applySelectionStyle(loadOptionActor, loadSelected && hasAvailableSaves());
+    }
+
+    private void updateArrowAnimation(Image arrow, boolean selected, boolean leftSide) {
+        if (arrow == null) {
+            return;
+        }
+        arrow.clearActions();
+        arrow.setScale(1f);
+        arrow.clearActions();
+        arrow.setScale(1f);
+        float width = arrow.getWidth() > 0f ? arrow.getWidth() : arrow.getPrefWidth();
+        float height = arrow.getHeight() > 0f ? arrow.getHeight() : arrow.getPrefHeight();
+        float originX = leftSide ? width : 0f;
+        float originY = height * 0.5f;
+        arrow.setOrigin(originX, originY);
+        arrow.setScale(1f);
+
+        if (selected) {
+            arrow.setVisible(true);
+            arrow.addAction(Actions.sequence(
+                    Actions.delay(ARROW_ANIM_DELAY),
+                    Actions.forever(Actions.sequence(
+                            Actions.parallel(
+                                    Actions.scaleTo(1.1f, 1.08f, ARROW_ANIM_DURATION)
+                            ),
+                            Actions.parallel(
+                                    Actions.scaleTo(0.94f, 0.96f, ARROW_ANIM_DURATION)
+                            )
+                    ))
+            ));
+        } else {
+            arrow.setVisible(false);
+            arrow.setScale(1f);
+        }
+    }
+
+    private void applySelectionStyle(Actor actor, boolean selected) {
+        if (actor == null) {
+            return;
+        }
+        if (actor instanceof TextButton) {
+            ((TextButton) actor).setColor(selected ? Color.valueOf("9EE493") : Color.LIGHT_GRAY);
+        } else {
+            actor.setColor(selected ? Color.WHITE : new Color(0.9f, 0.9f, 0.9f, 1f));
+        }
+    }
+
+    private Image createArrowImage(Texture texture) {
+        Image image;
+        if (texture != null) {
+            image = new Image(texture);
+        } else {
+            image = solidPlaceholder(new Color(0f, 0f, 0f, 0f), 1, 1);
+        }
+        image.setVisible(false);
+        image.setScaling(Scaling.fit);
+        return image;
+    }
+
+    private void addArrowCell(Table row, Image arrow, boolean left) {
+        if (row == null || arrow == null) {
+            return;
+        }
+        float padLeft = left ? ARROW_FAR_PAD : ARROW_NEAR_PAD;
+        float padRight = left ? ARROW_NEAR_PAD : ARROW_FAR_PAD;
+        row.add(arrow)
+                .size(ARROW_SIZE, ARROW_SIZE)
+                .padLeft(padLeft)
+                .padRight(padRight)
+                .padTop(ARROW_VERTICAL_PAD)
+                .padBottom(ARROW_VERTICAL_PAD);
     }
 
     @Override
