@@ -1,0 +1,57 @@
+{
+  "botbug_green_valley": {
+    "bugName": "BotBug",
+    "bugType": "Malware",
+    "locationKey": "green_valley",
+    "visual": {
+      "background": "assets/images/fightingscreen/backgroundforfighting.png",
+      "questionBox": "assets/images/fightingscreen/fightingtextbox/questiontextbox.png",
+      "answersBox": "assets/images/fightingscreen/fightingtextbox/textboxfighting.png",
+      "correctSfx": "assets/sounds/afterselectingcharacter (1).mp3",
+      "incorrectSfx": "assets/sounds/soud/typingletters.mp3",
+      "heroFrames": [
+        "assets/images/fightingscreen/fightingframe/1fightingframenmale.png",
+        "assets/images/fightingscreen/fightingframe/2fightingframenmale.png",
+        "assets/images/fightingscreen/fightingframe/3fightingframemale.png",
+        "assets/images/fightingscreen/fightingframe/4fightingframemale.png"
+      ],
+      "heroTargetHeight": 340,
+      "heroFrameDuration": 0.35,
+      "enemyFrames": [
+        "assets/images/fightingscreen/fightingbug/1framebug.png",
+        "assets/images/fightingscreen/fightingbug/2framebug.png"
+      ],
+      "enemyTargetHeight": 300,
+      "enemyFrameDuration": 0.32
+    },
+    "battle": {
+      "enemyName": "BotBug",
+      "heroMaxHealth": 100,
+      "enemyMaxHealth": 90,
+      "damageToEnemyPerCorrect": 35,
+      "damageToHeroPerIncorrect": 25,
+      "questions": [
+        {
+          "prompt": "How to print CodeQuest?",
+          "options": [
+            "System.out.println(\"CodeQuest\");",
+            "printf(\"CodeQuest\");",
+            "System.out.println(\"CodeQuest\");",
+            "system.out.println(\"CodeQuest\");"
+          ],
+          "correctIndex": 0
+        },
+        {
+          "prompt": "Which keyword defines a class in Java?",
+          "options": ["def", "class", "struct", "function"],
+          "correctIndex": 1
+        },
+        {
+          "prompt": "Choose the correct file extension for Java source files",
+          "options": [".class", ".java", ".jar", ".jav"],
+          "correctIndex": 1
+        }
+      ]
+    }
+  }
+}
