@@ -19,6 +19,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.code_quest.Main;
 import io.github.code_quest.audio.BackgroundMusicManager;
+import io.github.code_quest.save.PlayerProfile;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -81,7 +82,7 @@ public class CharacterCustomizationScreen implements Screen {
 
     public CharacterCustomizationScreen(Main game, String selectedCharacter) {
         this.game = game;
-        this.selectedCharacter = selectedCharacter;
+        this.selectedCharacter = (selectedCharacter != null && !selectedCharacter.trim().isEmpty()) ? selectedCharacter : "male";
         this.camera = new OrthographicCamera();
         this.viewport = new FitViewport(800, 480, camera);
         camera.setToOrtho(false, 800, 480);
@@ -118,6 +119,26 @@ public class CharacterCustomizationScreen implements Screen {
         // Initialize character animations
         characterAnimations = new HashMap<>();
         loadCharacterAnimations();
+
+        // Load any previously saved customization details
+        PlayerProfile.ProfileSnapshot profile = PlayerProfile.load();
+        if (profile != null) {
+            if (selectedCharacter == null || selectedCharacter.trim().isEmpty()) {
+                String savedCharacter = profile.getCharacterKey();
+                if (savedCharacter != null && !savedCharacter.trim().isEmpty()) {
+                    this.selectedCharacter = savedCharacter;
+                }
+            }
+            if (profile.getPlayerName() != null && !profile.getPlayerName().isEmpty()) {
+                this.playerName = profile.getPlayerName();
+            }
+            if (profile.getPlayerAge() != null && !profile.getPlayerAge().isEmpty()) {
+                this.playerAge = profile.getPlayerAge();
+            }
+            if (profile.getPlayerCourse() != null && !profile.getPlayerCourse().isEmpty()) {
+                this.playerCourse = profile.getPlayerCourse();
+            }
+        }
 
         // Initialize input field bounds
         fieldBounds = new Rectangle[3];
@@ -593,7 +614,7 @@ public class CharacterCustomizationScreen implements Screen {
         String[] instructions = {
             "↑ ↓ NAVIGATE FIELDS",
             "TYPE TO CUSTOMIZE",
-            "ENTER → START | BACKSPACE ← BACK"
+            "ENTER → START | ESC ← BACK"
         };
 
         for (int i = 0; i < instructions.length; i++) {
@@ -640,10 +661,10 @@ public class CharacterCustomizationScreen implements Screen {
         boolean playTyping = false;
 
         // Navigate between fields
-        if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
             currentField = Math.max(0, currentField - 1);
             playTyping = true;
-        } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) {
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
             currentField = Math.min(2, currentField + 1);
             playTyping = true;
         }
@@ -656,14 +677,6 @@ public class CharacterCustomizationScreen implements Screen {
             currentText = currentText.substring(0, currentText.length() - 1);
             setFieldText(currentField, currentText);
             playTyping = true;
-        }
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE) && currentText.length() == 0) {
-            if (typingSound != null) {
-                typingSound.play(0.6f);
-            }
-            game.setScreen(new GameScreen(game));
-            return;
         }
 
         // Handle letters A-Z
@@ -717,10 +730,11 @@ public class CharacterCustomizationScreen implements Screen {
                 if (confirmSound != null) {
                     confirmSound.play(0.7f);
                 }
+                String characterKey = selectedCharacter != null && !selectedCharacter.trim().isEmpty() ? selectedCharacter : "male";
+                PlayerProfile.save(playerName.trim(), playerAge.trim(), playerCourse.trim(), characterKey);
                 // Start transition to game
                 isTransitioning = true;
                 transitionTime = 0f;
-                String characterKey = selectedCharacter != null ? selectedCharacter : "male";
                 pendingScreen = new GreenValleyScreen(game, characterKey);
                 playTyping = false;
             } else {

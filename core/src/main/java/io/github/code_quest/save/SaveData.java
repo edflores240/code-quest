@@ -14,10 +14,12 @@ public class SaveData {
     private int coins;
     private Array<String> inventory;
     private String characterKey;
+    private Array<String> defeatedEncounterIds;
 
     public SaveData() {
         this.inventory = new Array<>();
         this.characterKey = "male";
+        this.defeatedEncounterIds = new Array<>();
     }
 
     public SaveData(float positionX,
@@ -32,6 +34,7 @@ public class SaveData {
         this.coins = coins;
         this.inventory = inventory != null ? new Array<>(inventory) : new Array<>();
         this.characterKey = characterKey != null ? characterKey : "male";
+        this.defeatedEncounterIds = new Array<>();
     }
 
     public float getPositionX() {
@@ -82,6 +85,14 @@ public class SaveData {
         this.characterKey = characterKey != null ? characterKey : "male";
     }
 
+    public Array<String> getDefeatedEncounterIds() {
+        return defeatedEncounterIds;
+    }
+
+    public void setDefeatedEncounterIds(Array<String> defeatedEncounterIds) {
+        this.defeatedEncounterIds = defeatedEncounterIds != null ? new Array<>(defeatedEncounterIds) : new Array<>();
+    }
+
     @Override
     public String toString() {
         return "SaveData{" +
@@ -91,6 +102,7 @@ public class SaveData {
                 ", coins=" + coins +
                 ", inventory=" + inventory +
                 ", characterKey='" + characterKey + '\'' +
+                ", defeatedEncounterIds=" + defeatedEncounterIds +
                 '}';
     }
 
@@ -104,11 +116,12 @@ public class SaveData {
                 currentLevel == saveData.currentLevel &&
                 coins == saveData.coins &&
                 Objects.equals(inventory, saveData.inventory) &&
-                Objects.equals(characterKey, saveData.characterKey);
+                Objects.equals(characterKey, saveData.characterKey) &&
+                Objects.equals(defeatedEncounterIds, saveData.defeatedEncounterIds);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(positionX, positionY, currentLevel, coins, inventory, characterKey);
+        return Objects.hash(positionX, positionY, currentLevel, coins, inventory, characterKey, defeatedEncounterIds);
     }
 }

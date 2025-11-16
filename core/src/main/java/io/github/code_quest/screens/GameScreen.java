@@ -66,8 +66,6 @@ public class GameScreen implements Screen {
 
     // Input handling
     private int selectedIndex = 0;
-    private float keyCooldown = 0f;
-    private static final float KEY_COOLDOWN_TIME = 0.15f;
     private List<String> characterKeys;
 
     // Character card class to manage individual character UI
@@ -660,59 +658,54 @@ public class GameScreen implements Screen {
             return;
         }
 
-        // Handle keyboard input with cooldown
-        keyCooldown -= Gdx.graphics.getDeltaTime();
         boolean keyPressed = false;
         boolean selectionChanged = false;
 
-        if (keyCooldown <= 0) {
-            // Arrow key navigation
-            if (Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.A)) {
-                if (selectedIndex > 0) {
-                    selectedIndex--;
-                    if (selectedIndex >= 0 && selectedIndex < characterKeys.size()) {
-                        selectedCharacter = characterKeys.get(selectedIndex);
-                        hoveredCharacter = selectedCharacter; // Update hover state for animation
-                        keyPressed = true;
-                        selectionChanged = true;
-                    }
+        // Arrow key navigation without cooldown
+        if (Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.A)) {
+            if (selectedIndex > 0) {
+                selectedIndex--;
+                if (selectedIndex >= 0 && selectedIndex < characterKeys.size()) {
+                    selectedCharacter = characterKeys.get(selectedIndex);
+                    hoveredCharacter = selectedCharacter; // Update hover state for animation
+                    keyPressed = true;
+                    selectionChanged = true;
                 }
-            } else if (Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D)) {
-                if (selectedIndex < characterKeys.size() - 1) {
-                    selectedIndex++;
-                    if (selectedIndex >= 0 && selectedIndex < characterKeys.size()) {
-                        selectedCharacter = characterKeys.get(selectedIndex);
-                        hoveredCharacter = selectedCharacter; // Update hover state for animation
-                        keyPressed = true;
-                        selectionChanged = true;
-                    }
-                }
-            } else if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
-                // For future vertical navigation if needed
-                keyPressed = true;
-            } else if (Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S)) {
-                // For future vertical navigation if needed
-                keyPressed = true;
             }
+        } else if (Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D)) {
+            if (selectedIndex < characterKeys.size() - 1) {
+                selectedIndex++;
+                if (selectedIndex >= 0 && selectedIndex < characterKeys.size()) {
+                    selectedCharacter = characterKeys.get(selectedIndex);
+                    hoveredCharacter = selectedCharacter; // Update hover state for animation
+                    keyPressed = true;
+                    selectionChanged = true;
+                }
+            }
+        } else if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
+            // For future vertical navigation if needed
+            keyPressed = true;
+        } else if (Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S)) {
+            // For future vertical navigation if needed
+            keyPressed = true;
+        }
 
-            if (keyPressed) {
-                keyCooldown = KEY_COOLDOWN_TIME;
-                // Update all character cards to ensure proper hover and selection state
-                for (Map.Entry<String, CharacterCard> entry : characterCards.entrySet()) {
-                    CharacterCard card = entry.getValue();
-                    if (entry.getKey().equals(selectedCharacter)) {
-                        card.hoverProgress = 1f; // Force hover state for selected character
-                        card.selectProgress = 1f; // Force selection state for arrow to show
-                    } else {
-                        card.hoverProgress = 0f; // Clear hover for others
-                        card.selectProgress = 0f; // Clear selection for others
-                    }
+        if (keyPressed) {
+            // Update all character cards to ensure proper hover and selection state
+            for (Map.Entry<String, CharacterCard> entry : characterCards.entrySet()) {
+                CharacterCard card = entry.getValue();
+                if (entry.getKey().equals(selectedCharacter)) {
+                    card.hoverProgress = 1f; // Force hover state for selected character
+                    card.selectProgress = 1f; // Force selection state for arrow to show
+                } else {
+                    card.hoverProgress = 0f; // Clear hover for others
+                    card.selectProgress = 0f; // Clear selection for others
                 }
             }
+        }
 
-            if (selectionChanged && selectionSound != null) {
-                selectionSound.play(0.7f);
-            }
+        if (selectionChanged && selectionSound != null) {
+            selectionSound.play(0.7f);
         }
 
         // ENTER/SPACE key to select character and go to customization

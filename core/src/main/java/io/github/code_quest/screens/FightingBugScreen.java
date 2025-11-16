@@ -20,6 +20,8 @@ import io.github.code_quest.Main;
 import io.github.code_quest.battle.BattleMechanics;
 import io.github.code_quest.battle.BugEncounterDefinition;
 import io.github.code_quest.battle.BugEncounterRepository;
+import io.github.code_quest.save.PlayerProfile;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 /**
@@ -34,15 +36,50 @@ public class FightingBugScreen implements Screen {
     private static final float KEY_COOLDOWN = 0.18f;
     private static final float MESSAGE_DURATION = 3.2f;
     private static final float POST_BATTLE_DELAY = 2.5f;
-    private static final float ENEMY_LOOP_PAUSE = 0.6f;
-    private static final float HERO_ATTACK_DISPLAY = 0.55f;
+    private static final float ENEMY_LOOP_PAUSE = 0.72f;
+    private static final float HERO_ATTACK_DURATION = 0.48f;
     private static final float HERO_HURT_DISPLAY = 0.55f;
+
+    private static String resolveCharacterKey(String providedKey) {
+        if (providedKey != null) {
+            String trimmed = providedKey.trim();
+            if (!trimmed.isEmpty()) {
+                return trimmed;
+            }
+        }
+        return PlayerProfile.getCharacterKey("male");
+    }
+
+    private static String sanitizeInfoField(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim();
+    }
+
+    private static String ensureHeroName(String preferredName, String fallbackKey) {
+        String sanitizedPreferred = sanitizeInfoField(preferredName);
+        if (!sanitizedPreferred.isEmpty()) {
+            return sanitizedPreferred;
+        }
+        String sanitizedFallback = sanitizeInfoField(fallbackKey);
+        if (!sanitizedFallback.isEmpty()) {
+            return sanitizedFallback;
+        }
+        return "Hero";
+    }
 
     private final Main game;
     private final String characterKey;
+    private final String encounterId;
     private final BattleMechanics mechanics;
     private final VisualConfig visuals;
     private final Supplier<Screen> returnSupplier;
+    private final BiConsumer<String, Boolean> onBattleEnd;
+
+    private final String heroProfileName;
+    private final String heroProfileAge;
+    private final String heroProfileCourse;
 
     private final OrthographicCamera camera;
     private final FitViewport viewport;
@@ -84,29 +121,83 @@ public class FightingBugScreen implements Screen {
     public FightingBugScreen(Main game, String characterKey) {
         this(game,
                 characterKey,
-                createDefaultMechanics(characterKey),
-                VisualConfig.botBugDefaults(),
-                () -> new GreenValleyScreen(game, characterKey));
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public FightingBugScreen(Main game, String characterKey, String encounterId) {
         this(game,
                 characterKey,
-                createMechanicsFromEncounter(characterKey, encounterId),
-                createVisualsFromEncounter(encounterId),
-                () -> new GreenValleyScreen(game, characterKey));
+                encounterId,
+                null,
+                null,
+                null,
+                null);
+    }
+
+    public FightingBugScreen(Main game, String characterKey, String encounterId, BiConsumer<String, Boolean> onBattleEnd) {
+        this(game,
+                characterKey,
+                encounterId,
+                null,
+                null,
+                null,
+                onBattleEnd);
     }
 
     public FightingBugScreen(Main game,
                              String characterKey,
+                             String encounterId,
+                             Supplier<Screen> returnSupplier,
+                             BiConsumer<String, Boolean> onBattleEnd) {
+        this(game,
+                characterKey,
+                encounterId,
+                null,
+                null,
+                returnSupplier,
+                onBattleEnd);
+    }
+
+    public FightingBugScreen(Main game,
+                             String characterKey,
+                             String encounterId,
                              BattleMechanics mechanics,
                              VisualConfig visuals,
-                             Supplier<Screen> returnSupplier) {
+                             Supplier<Screen> returnSupplier,
+                             BiConsumer<String, Boolean> onBattleEnd) {
+        String resolvedCharacterKey = resolveCharacterKey(characterKey);
+
         this.game = game;
-        this.characterKey = characterKey;
-        this.mechanics = mechanics;
-        this.visuals = visuals != null ? visuals : VisualConfig.botBugDefaults();
-        this.returnSupplier = returnSupplier;
+        this.characterKey = resolvedCharacterKey;
+        this.encounterId = encounterId;
+
+        PlayerProfile.ProfileSnapshot profile = PlayerProfile.load();
+        String storedName = profile != null ? profile.getPlayerName() : null;
+        String storedAge = profile != null ? profile.getPlayerAge() : null;
+        String storedCourse = profile != null ? profile.getPlayerCourse() : null;
+
+        String sanitizedName = sanitizeInfoField(storedName);
+        this.heroProfileName = sanitizedName;
+        this.heroProfileAge = sanitizeInfoField(storedAge);
+        this.heroProfileCourse = sanitizeInfoField(storedCourse);
+
+        String battleHeroName = ensureHeroName(sanitizedName, resolvedCharacterKey);
+
+        BattleMechanics computedMechanics = mechanics;
+        if (computedMechanics == null) {
+            computedMechanics = createMechanicsFromEncounter(battleHeroName, encounterId);
+        }
+        this.mechanics = computedMechanics;
+
+        VisualConfig resolvedVisuals = visuals != null ? visuals : createVisualsFromEncounter(encounterId);
+        this.visuals = resolvedVisuals != null ? resolvedVisuals : VisualConfig.botBugDefaults();
+
+        this.returnSupplier = returnSupplier != null ? returnSupplier : () -> new GreenValleyScreen(game, this.characterKey);
+        this.onBattleEnd = onBattleEnd;
 
         this.camera = new OrthographicCamera();
         this.viewport = new FitViewport(VIEWPORT_WIDTH, VIEWPORT_HEIGHT, camera);
@@ -191,7 +282,7 @@ public class FightingBugScreen implements Screen {
     }
 
     public static BattleMechanics createDefaultMechanics(String heroName) {
-        String resolvedHeroName = heroName == null || heroName.trim().isEmpty() ? "Hero" : heroName;
+        String resolvedHeroName = ensureHeroName(heroName, null);
         return new BattleMechanics.Builder()
                 .heroName(resolvedHeroName)
                 .enemyName("BotBug")
@@ -219,12 +310,154 @@ public class FightingBugScreen implements Screen {
                 .build();
     }
 
+    private static BattleMechanics createBotBugMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("BotBug")
+                .heroMaxHealth(100)
+                .enemyMaxHealth(90)
+                .damageToEnemyPerCorrect(35)
+                .damageToHeroPerIncorrect(25)
+                .addQuestion(
+                        "How to print CodeQuest?",
+                        new String[]{
+                                "System.out.println(\"CodeQuest\");",
+                                "printf(\"CodeQuest\");",
+                                "System.out.println(\"CodeQuest\");",
+                                "system.out.println(\"CodeQuest\");"
+                        },
+                        0)
+                .addQuestion(
+                        "Which keyword defines a class in Java?",
+                        new String[]{"def", "class", "struct", "function"},
+                        1)
+                .addQuestion(
+                        "Choose the correct file extension for Java source files",
+                        new String[]{".class", ".java", ".jar", ".jav"},
+                        1)
+                .build();
+    }
+
+    private static BattleMechanics createBug2Mechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("CodeBug")
+                .heroMaxHealth(100)
+                .enemyMaxHealth(80)
+                .damageToEnemyPerCorrect(30)
+                .damageToHeroPerIncorrect(20)
+                .addQuestion(
+                        "What is the entry point of a Java program?",
+                        new String[]{"main method", "start method", "run method", "init method"},
+                        0)
+                .addQuestion(
+                        "Which data type is used for whole numbers in Java?",
+                        new String[]{"float", "int", "char", "boolean"},
+                        1)
+                .addQuestion(
+                        "How do you declare a variable in Java?",
+                        new String[]{"var name;", "int name;", "declare name;", "set name;"},
+                        1)
+                .build();
+    }
+
+    private static BattleMechanics createBug3Mechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("LogicBug")
+                .heroMaxHealth(100)
+                .enemyMaxHealth(85)
+                .damageToEnemyPerCorrect(32)
+                .damageToHeroPerIncorrect(22)
+                .addQuestion(
+                        "What is used to make decisions in Java?",
+                        new String[]{"if statement", "for loop", "method", "class"},
+                        0)
+                .addQuestion(
+                        "Which loop is used to repeat code a fixed number of times?",
+                        new String[]{"if", "while", "for", "switch"},
+                        2)
+                .addQuestion(
+                        "How do you create an object in Java?",
+                        new String[]{"new ClassName()", "ClassName.create()", "make ClassName", "build ClassName"},
+                        0)
+                .build();
+    }
+
+    private static BattleMechanics createBug4DesertMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("DesertBug4")
+                .heroMaxHealth(100)
+                .enemyMaxHealth(85)
+                .damageToEnemyPerCorrect(35)
+                .damageToHeroPerIncorrect(25)
+                .addQuestion(
+                        "What is the purpose of the 'main' method in Java?",
+                        new String[]{"Entry point of the program", "Define a class", "Import libraries", "Create objects"},
+                        0)
+                .addQuestion(
+                        "Which keyword is used to inherit from a class in Java?",
+                        new String[]{"implements", "extends", "inherits", "super"},
+                        1)
+                .addQuestion(
+                        "How do you declare an array in Java?",
+                        new String[]{"int[] arr;", "array int arr;", "int arr[];", "Both 0 and 2"},
+                        3)
+                .build();
+    }
+
+    private static BattleMechanics createBug5DesertMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("DesertBug5")
+                .heroMaxHealth(100)
+                .enemyMaxHealth(80)
+                .damageToEnemyPerCorrect(30)
+                .damageToHeroPerIncorrect(20)
+                .addQuestion(
+                        "What does 'static' mean in Java?",
+                        new String[]{"Belongs to the class", "Belongs to an instance", "Is constant", "Is final"},
+                        0)
+                .addQuestion(
+                        "Which loop structure executes at least once?",
+                        new String[]{"for", "while", "do-while", "if"},
+                        2)
+                .addQuestion(
+                        "What is a constructor in Java?",
+                        new String[]{"A method to destroy objects", "A special method to initialize objects", "A way to import classes", "A loop structure"},
+                        1)
+                .build();
+    }
+
     private static BattleMechanics createMechanicsFromEncounter(String heroName, String encounterId) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        if (encounterId != null) {
+            switch (encounterId) {
+                case "botbug_green_valley":
+                    return createBotBugMechanics(resolvedHeroName);
+                case "bug2_green_valley":
+                    return createBug2Mechanics(resolvedHeroName);
+                case "bug3_green_valley":
+                    return createBug3Mechanics(resolvedHeroName);
+                case "bug4_desert":
+                    return createBug4DesertMechanics(resolvedHeroName);
+                case "bug5_desert":
+                    return createBug5DesertMechanics(resolvedHeroName);
+                default:
+                    break;
+            }
+        }
         if (encounterId != null && BugEncounterRepository.has(encounterId)) {
             BugEncounterDefinition definition = BugEncounterRepository.get(encounterId);
             BugEncounterDefinition.Battle battle = definition.getBattle();
             BattleMechanics.Builder builder = new BattleMechanics.Builder()
-                    .heroName(heroName)
+                    .heroName(resolvedHeroName)
                     .enemyName(battle.getEnemyName())
                     .heroMaxHealth(battle.getHeroMaxHealth())
                     .enemyMaxHealth(battle.getEnemyMaxHealth())
@@ -235,7 +468,7 @@ public class FightingBugScreen implements Screen {
             }
             return builder.build();
         }
-        return createDefaultMechanics(heroName);
+        return createDefaultMechanics(resolvedHeroName);
     }
 
     private static VisualConfig createVisualsFromEncounter(String encounterId) {
@@ -275,6 +508,7 @@ public class FightingBugScreen implements Screen {
         drawCharacters();
         drawQuestionPanel();
         drawOptionsPanel();
+        drawHeroProfileInfo();
         drawStatusText();
 
         batch.end();
@@ -356,7 +590,7 @@ public class FightingBugScreen implements Screen {
             if (correctSound != null) {
                 correctSound.play(0.9f);
             }
-            heroAttackTimer = HERO_ATTACK_DISPLAY;
+            heroAttackTimer = HERO_ATTACK_DURATION;
             heroHurtTimer = 0f;
         } else {
             if (incorrectSound != null) {
@@ -545,6 +779,33 @@ public class FightingBugScreen implements Screen {
         optionFont.setColor(Color.WHITE);
     }
 
+    private void drawHeroProfileInfo() {
+        if ((heroProfileName == null || heroProfileName.isEmpty())
+                && (heroProfileCourse == null || heroProfileCourse.isEmpty())
+                && (heroProfileAge == null || heroProfileAge.isEmpty())) {
+            return;
+        }
+
+        float x = 46f;
+        float y = VIEWPORT_HEIGHT - 120f;
+        Color originalColor = new Color(infoFont.getColor());
+        infoFont.setColor(Color.valueOf("EFE6C7"));
+
+        if (heroProfileName != null && !heroProfileName.isEmpty()) {
+            infoFont.draw(batch, "Name: " + heroProfileName, x, y);
+            y -= 20f;
+        }
+        if (heroProfileCourse != null && !heroProfileCourse.isEmpty()) {
+            infoFont.draw(batch, "Course: " + heroProfileCourse, x, y);
+            y -= 20f;
+        }
+        if (heroProfileAge != null && !heroProfileAge.isEmpty()) {
+            infoFont.draw(batch, "Age: " + heroProfileAge, x, y);
+        }
+
+        infoFont.setColor(originalColor);
+    }
+
     private void drawStatusText() {
         String bottomHint;
         if (mechanics.isBattleFinished()) {
@@ -566,6 +827,9 @@ public class FightingBugScreen implements Screen {
     }
 
     private void returnToWorld() {
+        if (onBattleEnd != null && encounterId != null) {
+            onBattleEnd.accept(encounterId, mechanics.isHeroVictorious());
+        }
         if (returnSupplier != null) {
             game.setScreen(returnSupplier.get());
         } else {
