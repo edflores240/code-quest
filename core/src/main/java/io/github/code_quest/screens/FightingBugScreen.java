@@ -310,6 +310,150 @@ public class FightingBugScreen implements Screen {
                 .build();
     }
 
+    private static BattleMechanics createBug1VolcanicMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("MagmaCrawler")
+                .heroMaxHealth(110)
+                .enemyMaxHealth(90)
+                .damageToEnemyPerCorrect(34)
+                .damageToHeroPerIncorrect(22)
+                .addQuestion(
+                        "Which class provides an immutable calendar date without time?",
+                        new String[]{"LocalDateTime", "LocalDate", "Date", "Calendar"},
+                        1)
+                .addQuestion(
+                        "What does Files.readAllLines(Path) return?",
+                        new String[]{"List<String>", "Stream<String>", "byte[]", "String"},
+                        0)
+                .addQuestion(
+                        "Which access modifier hides a constructor so a factory method must be used?",
+                        new String[]{"static", "private", "protected", "abstract"},
+                        1)
+                .build();
+    }
+
+    private static BattleMechanics createBug2VolcanicMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("LavaWarden")
+                .heroMaxHealth(110)
+                .enemyMaxHealth(95)
+                .damageToEnemyPerCorrect(36)
+                .damageToHeroPerIncorrect(24)
+                .addQuestion(
+                        "Which collection preserves insertion order and allows duplicates?",
+                        new String[]{"HashSet", "LinkedHashSet", "ArrayList", "TreeSet"},
+                        2)
+                .addQuestion(
+                        "Which executor backs CompletableFuture.supplyAsync by default?",
+                        new String[]{"ForkJoinPool.commonPool()", "Executors.newCachedThreadPool()", "A single-thread executor", "The calling thread"},
+                        0)
+                .addQuestion(
+                        "Which class provides coordinated read/write locks?",
+                        new String[]{"Semaphore", "ReentrantReadWriteLock", "CountDownLatch", "Phaser"},
+                        1)
+                .build();
+    }
+
+    private static BattleMechanics createBug3VolcanicMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("ObsidianStalker")
+                .heroMaxHealth(110)
+                .enemyMaxHealth(92)
+                .damageToEnemyPerCorrect(35)
+                .damageToHeroPerIncorrect(23)
+                .addQuestion(
+                        "Which Stream operation maps each element to a Stream and flattens the result?",
+                        new String[]{"map", "filter", "flatMap", "peek"},
+                        2)
+                .addQuestion(
+                        "Which package contains the Comparator interface?",
+                        new String[]{"java.io", "java.util", "java.lang", "java.time"},
+                        1)
+                .addQuestion(
+                        "Optional.ifPresentOrElse requires what type for the fallback action?",
+                        new String[]{"Runnable", "Supplier", "Consumer", "Predicate"},
+                        0)
+                .build();
+    }
+
+    private static BattleMechanics createBug4VolcanicMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("CinderSentinel")
+                .heroMaxHealth(115)
+                .enemyMaxHealth(96)
+                .damageToEnemyPerCorrect(37)
+                .damageToHeroPerIncorrect(24)
+                .addQuestion(
+                        "Which JDBC call disables auto-commit before managing transactions manually?",
+                        new String[]{"setAutoCommit(false)", "commit()", "rollback()", "close()"},
+                        0)
+                .addQuestion(
+                        "Which collection avoids ConcurrentModificationException by copying on writes?",
+                        new String[]{"CopyOnWriteArrayList", "HashMap", "ArrayDeque", "Vector"},
+                        0)
+                .addQuestion(
+                        "Which Stream terminal operation aggregates elements using an associative function?",
+                        new String[]{"map", "reduce", "flatMap", "collect"},
+                        1)
+                .build();
+    }
+
+    private static BattleMechanics createBug5VolcanicMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("InfernoDrifter")
+                .heroMaxHealth(115)
+                .enemyMaxHealth(98)
+                .damageToEnemyPerCorrect(38)
+                .damageToHeroPerIncorrect(25)
+                .addQuestion(
+                        "Collections.sort(List) in modern JDKs is based on which algorithm?",
+                        new String[]{"QuickSort", "TimSort", "MergeSort", "HeapSort"},
+                        1)
+                .addQuestion(
+                        "Which CompletableFuture method runs a BiConsumer after both futures finish?",
+                        new String[]{"thenApply", "thenAcceptBoth", "thenCompose", "runAfterEither"},
+                        1)
+                .addQuestion(
+                        "Which stream type avoids boxing when processing primitive ints?",
+                        new String[]{"Stream<Integer>", "IntStream", "Collection<Integer>", "OptionalInt"},
+                        1)
+                .build();
+    }
+
+    private static BattleMechanics createBug6VolcanicMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("PyroColossus")
+                .heroMaxHealth(120)
+                .enemyMaxHealth(105)
+                .damageToEnemyPerCorrect(40)
+                .damageToHeroPerIncorrect(28)
+                .addQuestion(
+                        "Which design pattern ensures a single globally accessible instance?",
+                        new String[]{"Observer", "Singleton", "Adapter", "Iterator"},
+                        1)
+                .addQuestion(
+                        "Which ExecutorService method waits for termination after shutdown?",
+                        new String[]{"submit", "invokeAll", "awaitTermination", "shutdownNow"},
+                        2)
+                .addQuestion(
+                        "Which NIO class represents a non-blocking socket channel?",
+                        new String[]{"ServerSocket", "SocketChannel", "DatagramSocket", "Selector"},
+                        1)
+                .build();
+    }
+
     private static BattleMechanics createBotBugMechanics(String heroName) {
         String resolvedHeroName = ensureHeroName(heroName, null);
         return new BattleMechanics.Builder()
@@ -387,6 +531,78 @@ public class FightingBugScreen implements Screen {
                 .build();
     }
 
+    private static BattleMechanics createBug1DesertMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("SandCrawler")
+                .heroMaxHealth(100)
+                .enemyMaxHealth(75)
+                .damageToEnemyPerCorrect(30)
+                .damageToHeroPerIncorrect(18)
+                .addQuestion(
+                        "Which keyword prevents a variable from being reassigned in Java?",
+                        new String[]{"const", "let", "final", "static"},
+                        2)
+                .addQuestion(
+                        "What does the expression 'a == b' evaluate?",
+                        new String[]{"Reference equality", "Value equality", "Assignment", "Type comparison"},
+                        0)
+                .addQuestion(
+                        "Which type is the result of dividing two ints in Java?",
+                        new String[]{"int", "float", "double", "long"},
+                        0)
+                .build();
+    }
+
+    private static BattleMechanics createBug2DesertMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("HeatSeeker")
+                .heroMaxHealth(100)
+                .enemyMaxHealth(80)
+                .damageToEnemyPerCorrect(32)
+                .damageToHeroPerIncorrect(20)
+                .addQuestion(
+                        "Which collection maintains insertion order and allows duplicates?",
+                        new String[]{"HashSet", "TreeSet", "ArrayList", "PriorityQueue"},
+                        2)
+                .addQuestion(
+                        "What will 'break' do inside a loop?",
+                        new String[]{"Skip iteration", "Exit the loop", "Restart loop", "Throw error"},
+                        1)
+                .addQuestion(
+                        "Which package contains the Scanner class?",
+                        new String[]{"java.lang", "java.util", "java.io", "java.time"},
+                        1)
+                .build();
+    }
+
+    private static BattleMechanics createBug3DesertMechanics(String heroName) {
+        String resolvedHeroName = ensureHeroName(heroName, null);
+        return new BattleMechanics.Builder()
+                .heroName(resolvedHeroName)
+                .enemyName("MirageMantis")
+                .heroMaxHealth(100)
+                .enemyMaxHealth(82)
+                .damageToEnemyPerCorrect(33)
+                .damageToHeroPerIncorrect(22)
+                .addQuestion(
+                        "Which access modifier makes a member visible only within its own class?",
+                        new String[]{"public", "protected", "private", "default"},
+                        2)
+                .addQuestion(
+                        "What is the default value of an uninitialized boolean field?",
+                        new String[]{"true", "false", "null", "undefined"},
+                        1)
+                .addQuestion(
+                        "Which exception is unchecked?",
+                        new String[]{"IOException", "SQLException", "NullPointerException", "InterruptedException"},
+                        2)
+                .build();
+    }
+
     private static BattleMechanics createBug4DesertMechanics(String heroName) {
         String resolvedHeroName = ensureHeroName(heroName, null);
         return new BattleMechanics.Builder()
@@ -445,10 +661,28 @@ public class FightingBugScreen implements Screen {
                     return createBug2Mechanics(resolvedHeroName);
                 case "bug3_green_valley":
                     return createBug3Mechanics(resolvedHeroName);
+                case "bug1_desert":
+                    return createBug1DesertMechanics(resolvedHeroName);
+                case "bug2_desert":
+                    return createBug2DesertMechanics(resolvedHeroName);
+                case "bug3_desert":
+                    return createBug3DesertMechanics(resolvedHeroName);
                 case "bug4_desert":
                     return createBug4DesertMechanics(resolvedHeroName);
                 case "bug5_desert":
                     return createBug5DesertMechanics(resolvedHeroName);
+                case "bug1_volcanic":
+                    return createBug1VolcanicMechanics(resolvedHeroName);
+                case "bug2_volcanic":
+                    return createBug2VolcanicMechanics(resolvedHeroName);
+                case "bug3_volcanic":
+                    return createBug3VolcanicMechanics(resolvedHeroName);
+                case "bug4_volcanic":
+                    return createBug4VolcanicMechanics(resolvedHeroName);
+                case "bug5_volcanic":
+                    return createBug5VolcanicMechanics(resolvedHeroName);
+                case "bug6_volcanic":
+                    return createBug6VolcanicMechanics(resolvedHeroName);
                 default:
                     break;
             }

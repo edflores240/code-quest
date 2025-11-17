@@ -6,16 +6,22 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.Pixmap;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import io.github.code_quest.Main;
+import io.github.code_quest.save.SaveData;
+import io.github.code_quest.save.SaveManager;
+
+import io.github.code_quest.screens.FightingBugScreen;
 
 /**
  * Exploration screen for the desert biome. Uses a tighter viewport than {@link GreenValleyScreen}
@@ -34,6 +40,9 @@ public class DesertBiomeScreen implements Screen {
     private static final float PORTAL_LOOP_FRAME_DURATION = 0.18f;
     private static final float PORTAL_EXIT_RADIUS_RATIO = 0.35f;
     private static final float PORTAL_FADE_OUT_DURATION = 1.6f;
+    private static final float BUG_COLLISION_PADDING_RATIO = 0.35f;
+    private static final float AUTO_SAVE_INTERVAL = 20f;
+    private static final String DEFAULT_BUG_TEXTURE = "assets/images/bugbotwalking/bugfacingfront.png";
 
     private final Main game;
     private final String characterKey;
@@ -42,6 +51,17 @@ public class DesertBiomeScreen implements Screen {
     private final SpriteBatch batch;
     private final Array<Texture> loadedTextures;
     private final Vector2 position;
+    private final Rectangle playerBounds;
+    private final ObjectMap<String, Boolean> defeatedEncounters;
+    private final Array<DesertBug> desertBugs;
+    private Animation<TextureRegion> desertBugFrontAnimation;
+    private Animation<TextureRegion> desertBugBackAnimation;
+    private Animation<TextureRegion> desertBugLeftAnimation;
+    private Animation<TextureRegion> desertBugRightAnimation;
+    private TextureRegion desertBugFacingFront;
+    private TextureRegion desertBugFacingBack;
+    private TextureRegion desertBugFacingLeft;
+    private TextureRegion desertBugFacingRight;
 
     private Texture background;
     private Texture fadeTexture;
@@ -76,9 +96,18 @@ public class DesertBiomeScreen implements Screen {
     private float portalRenderWidth;
     private float portalRenderHeight;
     private float portalFadeOutTimer;
+    private boolean portalUnlocked;
     private boolean fadeInActive;
     private float fadeInTime;
     private static final float FADE_IN_DURATION = 1.0f;
+    private boolean saveLoaded;
+    private float autoSaveTimer;
+    private int currentLevel;
+    private int coins;
+    private Array<String> inventory;
+    private boolean pendingVolcanicTransition;
+    private float lastPlayerRenderWidth;
+    private float lastPlayerRenderHeight;
 
     private enum Direction {
         FRONT,
@@ -101,7 +130,10 @@ public class DesertBiomeScreen implements Screen {
         this.batch = new SpriteBatch();
         this.loadedTextures = new Array<>();
         this.position = new Vector2();
+        this.playerBounds = new Rectangle();
         this.portalPosition = new Vector2();
+        this.defeatedEncounters = new ObjectMap<>();
+        this.desertBugs = new Array<>();
 
         this.stateTime = 0f;
         this.currentDirection = Direction.FRONT;
@@ -113,8 +145,17 @@ public class DesertBiomeScreen implements Screen {
         this.portalRenderWidth = 0f;
         this.portalRenderHeight = 0f;
         this.portalFadeOutTimer = 0f;
+        this.portalUnlocked = false;
         this.fadeInActive = true;
         this.fadeInTime = 0f;
+        this.saveLoaded = false;
+        this.autoSaveTimer = 0f;
+        this.currentLevel = 2;
+        this.coins = 0;
+        this.inventory = new Array<>();
+        this.pendingVolcanicTransition = false;
+        this.lastPlayerRenderWidth = 0f;
+        this.lastPlayerRenderHeight = 0f;
 
         background = loadTexture(DESERT_BACKGROUND_PATH);
         if (background != null) {
@@ -129,6 +170,8 @@ public class DesertBiomeScreen implements Screen {
         loadPortalAssets();
         initializePortalPosition();
         createFadeTexture();
+        loadDesertBugAnimation();
+        initializeBugEncounters();
     }
 
     private void loadAnimations() {
@@ -238,15 +281,23 @@ public class DesertBiomeScreen implements Screen {
     public void show() {
         fadeInActive = true;
         fadeInTime = 0f;
+        ensureSaveLoaded();
     }
 
     @Override
     public void render(float delta) {
+        ensureSaveLoaded();
         boolean moving = handleInput(delta);
         if (moving) {
             stateTime += delta;
         } else {
             stateTime = 0f;
+        }
+
+        autoSaveTimer += delta;
+        if (autoSaveTimer >= AUTO_SAVE_INTERVAL) {
+            autoSaveTimer = 0f;
+            saveGame();
         }
 
         Gdx.gl.glClearColor(0.15f, 0.12f, 0.05f, 1f);
@@ -263,12 +314,18 @@ public class DesertBiomeScreen implements Screen {
         }
 
         if (width > 0f && height > 0f) {
+            lastPlayerRenderWidth = width;
+            lastPlayerRenderHeight = height;
+        }
+
+        if (width > 0f && height > 0f) {
             float maxX = Math.max(0f, mapWidth - width);
             float maxY = Math.max(0f, mapHeight - height);
             position.x = MathUtils.clamp(position.x, 0f, maxX);
             position.y = MathUtils.clamp(position.y, 0f, maxY);
         }
 
+        updateBugEncounters(delta, width, height);
         updatePortal(delta, width, height);
 
         updateCamera(width, height);
@@ -278,6 +335,7 @@ public class DesertBiomeScreen implements Screen {
         if (background != null) {
             batch.draw(background, 0f, 0f, mapWidth, mapHeight);
         }
+        drawDesertBugs();
         drawPortal();
         if (frame != null) {
             batch.draw(frame, position.x, position.y, width, height);
@@ -302,6 +360,7 @@ public class DesertBiomeScreen implements Screen {
             portalLoopAnimation = null;
             portalReferenceFrame = null;
             portalActive = false;
+            portalUnlocked = false;
             return;
         }
 
@@ -321,7 +380,12 @@ public class DesertBiomeScreen implements Screen {
             portalRenderHeight = portalReferenceFrame.getRegionHeight() * PORTAL_SCALE;
         }
 
-        portalActive = portalReferenceFrame != null;
+        portalUnlocked = false;
+        portalActive = false;
+        portalIntroFinished = false;
+        portalFading = false;
+        portalStateTime = 0f;
+        portalFadeOutTimer = 0f;
     }
 
     private void initializePortalPosition() {
@@ -334,6 +398,26 @@ public class DesertBiomeScreen implements Screen {
                 Math.max(0f, mapWidth / 2f - drawWidth / 2f),
                 Math.max(0f, mapHeight / 2f - drawHeight / 2f)
         );
+    }
+
+    private void spawnPortalAtRandomPosition() {
+        if (portalReferenceFrame == null) {
+            return;
+        }
+        float maxX = Math.max(0f, mapWidth - portalRenderWidth);
+        float maxY = Math.max(0f, mapHeight - portalRenderHeight);
+
+        float spawnX = maxX > 0f ? MathUtils.random(0f, maxX) : 0f;
+        float spawnY = maxY > 0f ? MathUtils.random(0f, maxY) : 0f;
+
+        portalPosition.set(spawnX, spawnY);
+        portalActive = true;
+        portalUnlocked = true;
+        portalIntroFinished = (portalIntroAnimation == null);
+        portalFading = false;
+        portalStateTime = 0f;
+        portalFadeOutTimer = 0f;
+        pendingVolcanicTransition = false;
     }
 
     private void createFadeTexture() {
@@ -415,7 +499,17 @@ public class DesertBiomeScreen implements Screen {
     }
 
     private void updatePortal(float delta, float playerWidth, float playerHeight) {
-        if (!portalActive || portalReferenceFrame == null) {
+        if (portalReferenceFrame == null) {
+            portalActive = false;
+            return;
+        }
+
+        if (!portalUnlocked) {
+            portalActive = false;
+            portalFading = false;
+            portalFadeOutTimer = 0f;
+            portalIntroFinished = false;
+            portalStateTime = 0f;
             return;
         }
 
@@ -441,16 +535,20 @@ public class DesertBiomeScreen implements Screen {
         boolean insideRadius = distanceSquared <= radius * radius;
 
         if (insideRadius) {
+            portalActive = true;
             portalFading = false;
             portalFadeOutTimer = 0f;
+            if (portalUnlocked && !pendingVolcanicTransition) {
+                startVolcanicTransition();
+            }
         } else if (portalIntroFinished) {
             portalFading = true;
-        }
-
-        if (portalFading) {
-            portalFadeOutTimer += delta;
-            if (portalFadeOutTimer >= PORTAL_FADE_OUT_DURATION) {
-                portalActive = false;
+            if (portalActive) {
+                portalFadeOutTimer += delta;
+                if (portalFadeOutTimer >= PORTAL_FADE_OUT_DURATION) {
+                    portalFadeOutTimer = PORTAL_FADE_OUT_DURATION;
+                    portalActive = false;
+                }
             }
         }
     }
@@ -554,7 +652,7 @@ public class DesertBiomeScreen implements Screen {
 
     @Override
     public void pause() {
-        // no-op
+        saveGame();
     }
 
     @Override
@@ -564,7 +662,7 @@ public class DesertBiomeScreen implements Screen {
 
     @Override
     public void hide() {
-        // no-op
+        saveGame();
     }
 
     @Override
@@ -580,5 +678,437 @@ public class DesertBiomeScreen implements Screen {
             }
         }
         loadedTextures.clear();
+    }
+
+    private void initializeBugEncounters() {
+        desertBugs.clear();
+        Array<BugSpawn> spawns = new Array<>();
+        spawns.add(new BugSpawn("bug1_desert", DEFAULT_BUG_TEXTURE, 0.24f, 0.72f, 1.05f, 42f, 28f, 45f, 0.9f));
+        spawns.add(new BugSpawn("bug2_desert", DEFAULT_BUG_TEXTURE, 0.65f, 0.68f, 1.0f, 48f, 34f, 40f, 0.8f));
+        spawns.add(new BugSpawn("bug3_desert", DEFAULT_BUG_TEXTURE, 0.42f, 0.52f, 1.1f, 52f, 30f, 46f, 0.85f));
+        spawns.add(new BugSpawn("bug4_desert", DEFAULT_BUG_TEXTURE, 0.18f, 0.38f, 1.0f, 36f, 26f, 38f, 0.8f));
+        spawns.add(new BugSpawn("bug5_desert", DEFAULT_BUG_TEXTURE, 0.74f, 0.34f, 1.08f, 58f, 32f, 44f, 0.9f));
+
+        for (BugSpawn spawn : spawns) {
+            TextureRegion referenceFrame = desertBugFacingFront != null ? desertBugFacingFront : loadTextureRegion(spawn.texturePath);
+            if (referenceFrame == null) {
+                continue;
+            }
+
+            DesertBug bug = new DesertBug(spawn.encounterId, referenceFrame, spawn.scaleMultiplier);
+            bug.frontAnimation = desertBugFrontAnimation;
+            bug.backAnimation = desertBugBackAnimation;
+            bug.leftAnimation = desertBugLeftAnimation;
+            bug.rightAnimation = desertBugRightAnimation;
+            bug.facingFront = desertBugFacingFront;
+            bug.facingBack = desertBugFacingBack;
+            bug.facingLeft = desertBugFacingLeft != null ? desertBugFacingLeft : referenceFrame;
+            bug.facingRight = desertBugFacingRight != null ? desertBugFacingRight : referenceFrame;
+            bug.renderWidth = referenceFrame.getRegionWidth() * SPRITE_SCALE * spawn.scaleMultiplier;
+            bug.renderHeight = referenceFrame.getRegionHeight() * SPRITE_SCALE * spawn.scaleMultiplier;
+
+            float maxX = Math.max(0f, mapWidth - bug.renderWidth);
+            float maxY = Math.max(0f, mapHeight - bug.renderHeight);
+            float posX = MathUtils.clamp(mapWidth * spawn.positionRatioX, 0f, maxX);
+            float posY = MathUtils.clamp(mapHeight * spawn.positionRatioY, 0f, maxY);
+            bug.position.set(posX, posY);
+            bug.bounds.set(posX, posY, bug.renderWidth, bug.renderHeight);
+            initializeBugWaypoints(bug, spawn, maxX, maxY);
+            desertBugs.add(bug);
+        }
+
+        applyDefeatedState();
+    }
+
+    private void initializeBugWaypoints(DesertBug bug, BugSpawn spawn, float maxX, float maxY) {
+        float baseX = bug.position.x;
+        float baseY = bug.position.y;
+
+        float horizontalReach = MathUtils.clamp(spawn.patrolWidth, 10f, Math.max(10f, maxX));
+        float verticalReach = MathUtils.clamp(spawn.patrolHeight, 10f, Math.max(10f, maxY));
+
+        float x2 = MathUtils.clamp(baseX + horizontalReach, 0f, maxX);
+        float y2 = baseY;
+        float x3 = x2;
+        float y3 = MathUtils.clamp(baseY - verticalReach, 0f, maxY);
+        float x4 = baseX;
+        float y4 = y3;
+
+        bug.waypoints = new Vector2[]{
+                new Vector2(baseX, baseY),
+                new Vector2(x2, y2),
+                new Vector2(x3, y3),
+                new Vector2(x4, y4)
+        };
+        bug.targetIndex = 1;
+        bug.nextTargetIndex = 2;
+        bug.pauseTimer = 0f;
+        bug.pauseDuration = spawn.pauseSeconds;
+        bug.speed = spawn.speed;
+    }
+
+    private void drawDesertBugs() {
+        for (DesertBug bug : desertBugs) {
+            if (bug.defeated || bug.frame == null) {
+                continue;
+            }
+            TextureRegion toDraw;
+            if (bug.moving) {
+                switch (bug.direction) {
+                    case BACK:
+                        toDraw = bug.backAnimation != null ? bug.backAnimation.getKeyFrame(bug.stateTime, true) : bug.facingBack;
+                        break;
+                    case LEFT:
+                        toDraw = bug.leftAnimation != null ? bug.leftAnimation.getKeyFrame(bug.stateTime, true) : bug.facingLeft;
+                        break;
+                    case RIGHT:
+                        toDraw = bug.rightAnimation != null ? bug.rightAnimation.getKeyFrame(bug.stateTime, true) : bug.facingRight;
+                        break;
+                    case FRONT:
+                    default:
+                        toDraw = bug.frontAnimation != null ? bug.frontAnimation.getKeyFrame(bug.stateTime, true) : bug.facingFront;
+                        break;
+                }
+            } else {
+                switch (bug.direction) {
+                    case BACK:
+                        toDraw = bug.facingBack != null ? bug.facingBack : bug.frame;
+                        break;
+                    case LEFT:
+                        toDraw = bug.facingLeft != null ? bug.facingLeft : bug.frame;
+                        break;
+                    case RIGHT:
+                        toDraw = bug.facingRight != null ? bug.facingRight : bug.frame;
+                        break;
+                    case FRONT:
+                    default:
+                        toDraw = bug.facingFront != null ? bug.facingFront : bug.frame;
+                        break;
+                }
+            }
+            batch.draw(toDraw, bug.position.x, bug.position.y, bug.renderWidth, bug.renderHeight);
+        }
+    }
+
+    private void loadDesertBugAnimation() {
+        desertBugFrontAnimation = buildBugAnimation(
+                "assets/images/bugbotwalking/1bugwalkingfront.png",
+                "assets/images/bugbotwalking/2bugwalkingfront.png"
+        );
+        desertBugBackAnimation = buildBugAnimation(
+                "assets/images/bugbotwalking/1bugwalkingback.png",
+                "assets/images/bugbotwalking/2bugwalkingback.png"
+        );
+        desertBugLeftAnimation = buildBugAnimation(
+                "assets/images/bugbotwalking/1bugwalkingleft.png",
+                "assets/images/bugbotwalking/2bugwalkingleft.png"
+        );
+        desertBugRightAnimation = buildBugAnimation(
+                "assets/images/bugbotwalking/1bugwalkingright.png",
+                "assets/images/bugbotwalking/2bugwalkingright.png"
+        );
+
+        desertBugFacingFront = firstFrame(desertBugFrontAnimation);
+        desertBugFacingBack = firstFrame(desertBugBackAnimation);
+        desertBugFacingLeft = firstFrame(desertBugLeftAnimation);
+        desertBugFacingRight = firstFrame(desertBugRightAnimation);
+        if (desertBugFacingFront == null) {
+            desertBugFacingFront = loadTextureRegion(DEFAULT_BUG_TEXTURE);
+        }
+    }
+
+    private Animation<TextureRegion> buildBugAnimation(String firstPath, String secondPath) {
+        Array<TextureRegion> frames = new Array<>();
+        addFrameIfExists(frames, firstPath);
+        addFrameIfExists(frames, secondPath);
+        if (frames.isEmpty()) {
+            return null;
+        }
+        Animation<TextureRegion> animation = new Animation<>(0.24f, frames, Animation.PlayMode.LOOP);
+        return animation;
+    }
+
+    private void addFrameIfExists(Array<TextureRegion> frames, String path) {
+        if (!Gdx.files.internal(path).exists()) {
+            return;
+        }
+        Texture texture = loadTexture(path);
+        frames.add(new TextureRegion(texture));
+    }
+
+    private TextureRegion firstFrame(Animation<TextureRegion> animation) {
+        if (animation == null) {
+            return null;
+        }
+        return animation.getKeyFrame(0f);
+    }
+
+    private void updateBugEncounters(float delta, float playerWidth, float playerHeight) {
+        if (playerWidth <= 0f || playerHeight <= 0f) {
+            return;
+        }
+
+        float playerPaddingX = playerWidth * BUG_COLLISION_PADDING_RATIO;
+        float playerPaddingY = playerHeight * BUG_COLLISION_PADDING_RATIO;
+        float playerCollisionWidth = Math.max(0f, playerWidth - playerPaddingX);
+        float playerCollisionHeight = Math.max(0f, playerHeight - playerPaddingY);
+
+        playerBounds.set(
+                position.x + (playerWidth - playerCollisionWidth) / 2f,
+                position.y + (playerHeight - playerCollisionHeight) / 2f,
+                playerCollisionWidth,
+                playerCollisionHeight
+        );
+
+        for (DesertBug bug : desertBugs) {
+            if (bug.defeated || bug.frame == null) {
+                continue;
+            }
+
+            updateBugMovement(bug, delta);
+
+            float bugPaddingX = bug.renderWidth * BUG_COLLISION_PADDING_RATIO;
+            float bugPaddingY = bug.renderHeight * BUG_COLLISION_PADDING_RATIO;
+            float bugCollisionWidth = Math.max(0f, bug.renderWidth - bugPaddingX);
+            float bugCollisionHeight = Math.max(0f, bug.renderHeight - bugPaddingY);
+            bug.bounds.set(
+                    bug.position.x + (bug.renderWidth - bugCollisionWidth) / 2f,
+                    bug.position.y + (bug.renderHeight - bugCollisionHeight) / 2f,
+                    bugCollisionWidth,
+                    bugCollisionHeight
+            );
+
+            if (!bug.triggered && playerBounds.overlaps(bug.bounds)) {
+                startDesertEncounter(bug);
+                break;
+            }
+        }
+    }
+
+    private void startDesertEncounter(final DesertBug bug) {
+        bug.triggered = true;
+        Gdx.app.postRunnable(() -> game.setScreen(new FightingBugScreen(game,
+                characterKey,
+                bug.encounterId,
+                () -> DesertBiomeScreen.this,
+                (id, won) -> {
+                    bug.triggered = false;
+                    if (won) {
+                        bug.defeated = true;
+                        defeatedEncounters.put(id, true);
+                        saveGame();
+                        unlockPortalIfReady();
+                    }
+                })));
+    }
+
+    private void saveGame() {
+        if (!positionInitialized) {
+            return;
+        }
+
+        Array<String> defeatedIds = new Array<>();
+        for (ObjectMap.Entry<String, Boolean> entry : defeatedEncounters) {
+            if (entry.value) {
+                defeatedIds.add(entry.key);
+            }
+        }
+
+        SaveData data = new SaveData(position.x, position.y, currentLevel, coins, inventory, characterKey);
+        data.setDefeatedEncounterIds(defeatedIds);
+        SaveManager.save(data);
+    }
+
+    private void loadGame() {
+        SaveData data = SaveManager.load();
+        if (data == null) {
+            return;
+        }
+
+        position.set(data.getPositionX(), data.getPositionY());
+        positionInitialized = true;
+        currentLevel = data.getCurrentLevel();
+        coins = data.getCoins();
+        inventory = data.getInventory() != null ? new Array<>(data.getInventory()) : new Array<>();
+
+        defeatedEncounters.clear();
+        if (data.getDefeatedEncounterIds() != null) {
+            for (String id : data.getDefeatedEncounterIds()) {
+                defeatedEncounters.put(id, true);
+            }
+        }
+
+        applyDefeatedState();
+        unlockPortalIfReady();
+    }
+
+    private void applyDefeatedState() {
+        for (DesertBug bug : desertBugs) {
+            bug.defeated = defeatedEncounters.get(bug.encounterId, false);
+        }
+    }
+
+    private void ensureSaveLoaded() {
+        if (!saveLoaded) {
+            loadGame();
+            saveLoaded = true;
+            unlockPortalIfReady();
+        }
+    }
+
+    private void updateBugMovement(DesertBug bug, float delta) {
+        if (bug.waypoints == null || bug.waypoints.length < 2) {
+            return;
+        }
+
+        if (bug.pauseTimer > 0f) {
+            bug.pauseTimer -= delta;
+            if (bug.pauseTimer <= 0f) {
+                bug.pauseTimer = 0f;
+            }
+            bug.moving = false;
+            return;
+        }
+
+        Vector2 target = bug.waypoints[bug.targetIndex];
+        Vector2 toTarget = new Vector2(target).sub(bug.position);
+        float distance = toTarget.len();
+        float moveAmount = bug.speed * delta;
+
+        if (distance <= moveAmount) {
+            bug.position.set(target);
+            bug.pauseTimer = bug.pauseDuration;
+            bug.targetIndex = bug.nextTargetIndex;
+            bug.nextTargetIndex = (bug.nextTargetIndex + 1) % bug.waypoints.length;
+            bug.moving = false;
+            bug.stateTime = 0f;
+        } else {
+            if (distance > 0f) {
+                toTarget.nor().scl(moveAmount);
+                bug.position.add(toTarget);
+            }
+            bug.moving = true;
+            bug.stateTime += delta;
+            float moveX = toTarget.x;
+            float moveY = toTarget.y;
+            if (Math.abs(moveX) > Math.abs(moveY)) {
+                bug.direction = moveX > 0f ? Direction.RIGHT : Direction.LEFT;
+            } else {
+                bug.direction = moveY > 0f ? Direction.BACK : Direction.FRONT;
+            }
+        }
+    }
+
+    private void unlockPortalIfReady() {
+        if (portalReferenceFrame == null) {
+            return;
+        }
+        if (!portalUnlocked && allDesertBugsDefeated()) {
+            spawnPortalAtRandomPosition();
+        }
+    }
+
+    private boolean allDesertBugsDefeated() {
+        for (DesertBug bug : desertBugs) {
+            if (!bug.defeated) {
+                return false;
+            }
+        }
+        return desertBugs.size > 0;
+    }
+
+    private void startVolcanicTransition() {
+        pendingVolcanicTransition = true;
+        Gdx.app.postRunnable(() -> game.setScreen(new VolcanicBiomeScreen(game, characterKey)));
+    }
+
+    private static class BugSpawn {
+        final String encounterId;
+        final String texturePath;
+        final float positionRatioX;
+        final float positionRatioY;
+        final float scaleMultiplier;
+        final float patrolWidth;
+        final float patrolHeight;
+        final float speed;
+        final float pauseSeconds;
+
+        BugSpawn(String encounterId,
+                 String texturePath,
+                 float positionRatioX,
+                 float positionRatioY,
+                 float scaleMultiplier,
+                 float patrolWidth,
+                 float patrolHeight,
+                 float speed,
+                 float pauseSeconds) {
+            this.encounterId = encounterId;
+            this.texturePath = texturePath;
+            this.positionRatioX = positionRatioX;
+            this.positionRatioY = positionRatioY;
+            this.scaleMultiplier = scaleMultiplier;
+            this.patrolWidth = patrolWidth;
+            this.patrolHeight = patrolHeight;
+            this.speed = speed;
+            this.pauseSeconds = pauseSeconds;
+        }
+    }
+
+    private static class DesertBug {
+        final String encounterId;
+        final TextureRegion frame;
+        final Vector2 position;
+        final Rectangle bounds;
+        final float scaleMultiplier;
+        float renderWidth;
+        float renderHeight;
+        boolean triggered;
+        boolean defeated;
+        Vector2[] waypoints;
+        int targetIndex;
+        int nextTargetIndex;
+        float pauseTimer;
+        float pauseDuration;
+        float speed;
+        Animation<TextureRegion> frontAnimation;
+        Animation<TextureRegion> backAnimation;
+        Animation<TextureRegion> leftAnimation;
+        Animation<TextureRegion> rightAnimation;
+        TextureRegion facingFront;
+        TextureRegion facingBack;
+        TextureRegion facingLeft;
+        TextureRegion facingRight;
+        float stateTime;
+        boolean moving;
+        Direction direction;
+
+        DesertBug(String encounterId, TextureRegion frame, float scaleMultiplier) {
+            this.encounterId = encounterId;
+            this.frame = frame;
+            this.scaleMultiplier = scaleMultiplier;
+            this.position = new Vector2();
+            this.bounds = new Rectangle();
+            this.renderWidth = 0f;
+            this.renderHeight = 0f;
+            this.triggered = false;
+            this.defeated = false;
+            this.waypoints = null;
+            this.targetIndex = 0;
+            this.nextTargetIndex = 1;
+            this.pauseTimer = 0f;
+            this.pauseDuration = 0f;
+            this.speed = 0f;
+            this.stateTime = 0f;
+            this.moving = false;
+            this.frontAnimation = null;
+            this.backAnimation = null;
+            this.leftAnimation = null;
+            this.rightAnimation = null;
+            this.facingFront = frame;
+            this.facingBack = frame;
+            this.facingLeft = frame;
+            this.facingRight = frame;
+            this.direction = Direction.FRONT;
+        }
     }
 }
